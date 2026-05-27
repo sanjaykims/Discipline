@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
+import { BottomNav } from "@/components/BottomNav";
 
 const geist = Geist({ subsets: ["latin"] });
 
@@ -10,11 +11,19 @@ export const metadata: Metadata = {
   description: "Your daily habit tracker",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#0f0f14",
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${geist.className} bg-gray-950 text-gray-100 min-h-screen`}>
-        <nav className="border-b border-gray-800 px-6 py-4 flex items-center justify-between max-w-4xl mx-auto">
+      <body className={`${geist.className} bg-gray-950 text-gray-100 min-h-screen overflow-x-hidden`}>
+        {/* Desktop top nav */}
+        <nav className="hidden md:flex border-b border-gray-800 px-6 py-4 items-center justify-between max-w-4xl mx-auto">
           <Link href="/" className="text-xl font-bold tracking-tight">
             ⚡ Discipline
           </Link>
@@ -24,9 +33,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/stats" className="hover:text-white transition-colors">Stats</Link>
           </div>
         </nav>
-        <main className="max-w-4xl mx-auto px-6 py-8">
+
+        {/* Mobile top bar — title only */}
+        <div className="md:hidden flex items-center justify-between px-4 pt-4 pb-2">
+          <span className="text-lg font-bold tracking-tight">⚡ Discipline</span>
+        </div>
+
+        <main className="max-w-4xl mx-auto px-4 py-4 md:px-6 md:py-8 pb-24 md:pb-8">
           {children}
         </main>
+
+        <BottomNav />
       </body>
     </html>
   );

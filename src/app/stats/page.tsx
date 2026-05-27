@@ -8,9 +8,7 @@ import type { Habit, Completion } from "@/lib/types";
 type ViewMode = "week" | "month";
 
 function computeStreak(habitId: string, completions: Completion[]): number {
-  const dates = new Set(
-    completions.filter(c => c.habit_id === habitId).map(c => c.completed_date)
-  );
+  const dates = new Set(completions.filter(c => c.habit_id === habitId).map(c => c.completed_date));
   let streak = 0;
   let cursor = new Date();
   while (true) {
@@ -43,10 +41,7 @@ export default function StatsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Build week columns (last 7 days)
   const weekDays = eachDayOfInterval({ start: subDays(today, 6), end: today });
-
-  // Build month grid
   const monthStart = startOfMonth(today);
   const monthEnd = endOfMonth(today);
   const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
@@ -61,41 +56,41 @@ export default function StatsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold">Stats</h1>
-        <div className="flex rounded-lg overflow-hidden border border-gray-700 text-sm">
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-2xl font-bold">Stats</h1>
+        <div className="flex rounded-xl overflow-hidden border border-gray-700 text-sm">
           <button
             onClick={() => setView("week")}
-            className={`px-4 py-2 transition-colors ${view === "week" ? "bg-indigo-600 text-white" : "bg-gray-900 text-gray-400 hover:text-white"}`}
+            className={`px-4 py-2 transition-colors ${view === "week" ? "bg-indigo-600 text-white" : "bg-gray-900 text-gray-400"}`}
           >
             Week
           </button>
           <button
             onClick={() => setView("month")}
-            className={`px-4 py-2 transition-colors ${view === "month" ? "bg-indigo-600 text-white" : "bg-gray-900 text-gray-400 hover:text-white"}`}
+            className={`px-4 py-2 transition-colors ${view === "month" ? "bg-indigo-600 text-white" : "bg-gray-900 text-gray-400"}`}
           >
             Month
           </button>
         </div>
       </div>
 
-      {/* Streak cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-        {habits.slice(0, 4).map(h => {
+      {/* Streak cards — all habits, 2 col */}
+      <div className="grid grid-cols-2 gap-2.5 mb-6">
+        {habits.map(h => {
           const streak = computeStreak(h.id, completions);
           return (
-            <div key={h.id} className="bg-gray-900 border border-gray-700 rounded-xl p-4">
-              <div className="text-2xl mb-1">{h.icon}</div>
+            <div key={h.id} className="bg-gray-900 border border-gray-700 rounded-xl p-3">
+              <div className="text-xl mb-1">{h.icon}</div>
               <p className="text-xs text-gray-400 truncate mb-1">{h.name}</p>
-              <p className="text-2xl font-bold" style={{ color: h.color }}>{streak}</p>
-              <p className="text-xs text-gray-500">day streak</p>
+              <p className="text-xl font-bold tabular-nums" style={{ color: h.color }}>{streak}</p>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide">day streak</p>
             </div>
           );
         })}
       </div>
 
       {view === "week" ? (
-        <WeekView habits={habits} days={weekDays} isDone={isDone} />
+        <WeekView habits={habits} days={weekDays} isDone={isDone} today={today} />
       ) : (
         <MonthView
           habits={habits}
@@ -110,68 +105,62 @@ export default function StatsPage() {
   );
 }
 
-function WeekView({ habits, days, isDone }: { habits: Habit[]; days: Date[]; isDone: (id: string, d: Date) => boolean }) {
+function WeekView({
+  habits, days, isDone, today,
+}: {
+  habits: Habit[];
+  days: Date[];
+  isDone: (id: string, d: Date) => boolean;
+  today: Date;
+}) {
+  const todayStr = format(today, "yyyy-MM-dd");
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr>
-            <th className="text-left text-gray-400 font-normal pb-3 pr-4 whitespace-nowrap">Habit</th>
-            {days.map(d => (
-              <th key={d.toISOString()} className="text-center text-gray-400 font-normal pb-3 px-2 whitespace-nowrap">
-                <span className="block text-xs">{format(d, "EEE")}</span>
-                <span className={`block text-base font-bold ${format(d, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd") ? "text-indigo-400" : "text-gray-300"}`}>
-                  {format(d, "d")}
-                </span>
-              </th>
-            ))}
-            <th className="text-center text-gray-400 font-normal pb-3 px-2">Streak</th>
-          </tr>
-        </thead>
-        <tbody>
-          {habits.map(h => {
-            const weekDone = days.filter(d => isDone(h.id, d)).length;
-            const streak = days.reduceRight((acc, d) => {
-              if (!isDone(h.id, d)) return acc === 7 ? 0 : acc; // simple visual streak
-              return acc;
-            }, 0);
-            void streak;
-            return (
-              <tr key={h.id} className="border-t border-gray-800">
-                <td className="py-3 pr-4">
-                  <div className="flex items-center gap-2">
-                    <span>{h.icon}</span>
-                    <span className="text-gray-200 whitespace-nowrap">{h.name}</span>
-                  </div>
-                </td>
-                {days.map(d => {
-                  const done = isDone(h.id, d);
-                  return (
-                    <td key={d.toISOString()} className="text-center py-3 px-2">
-                      <span
-                        className={`inline-block w-7 h-7 rounded-full text-xs flex items-center justify-center
-                          ${done ? "text-white" : "bg-gray-800 text-gray-600"}`}
-                        style={done ? { backgroundColor: h.color } : {}}
-                      >
-                        {done ? "✓" : "·"}
-                      </span>
-                    </td>
-                  );
-                })}
-                <td className="text-center py-3 px-2">
-                  <span className="font-bold" style={{ color: h.color }}>{weekDone}/7</span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="space-y-2">
+      {/* Day header row */}
+      <div className="flex items-center gap-2 pl-12 pr-12">
+        {days.map(d => {
+          const isToday = format(d, "yyyy-MM-dd") === todayStr;
+          return (
+            <div key={d.toISOString()} className="flex-1 flex flex-col items-center">
+              <span className="text-[9px] text-gray-500 uppercase">{format(d, "EEE").charAt(0)}</span>
+              <span className={`text-xs font-bold ${isToday ? "text-indigo-400" : "text-gray-500"}`}>
+                {format(d, "d")}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* One row per habit */}
+      {habits.map(h => {
+        const weekDone = days.filter(d => isDone(h.id, d)).length;
+        return (
+          <div key={h.id} className="flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-xl px-3 py-2.5">
+            <span className="text-lg shrink-0 w-7 text-center">{h.icon}</span>
+            <div className="flex flex-1 gap-2 min-w-0">
+              {days.map(d => {
+                const done = isDone(h.id, d);
+                return (
+                  <div
+                    key={d.toISOString()}
+                    className="flex-1 aspect-square rounded-full"
+                    style={done ? { backgroundColor: h.color } : { backgroundColor: "#1f2937" }}
+                  />
+                );
+              })}
+            </div>
+            <span className="text-xs font-bold tabular-nums shrink-0 w-7 text-right" style={{ color: h.color }}>
+              {weekDone}/7
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 function MonthView({
-  habits, days, firstDayOfWeek, daysInMonth, isDone, today
+  habits, days, firstDayOfWeek, daysInMonth, isDone, today,
 }: {
   habits: Habit[];
   days: Date[];
@@ -181,36 +170,38 @@ function MonthView({
   today: Date;
 }) {
   const [selected, setSelected] = useState<Habit>(habits[0]);
-
   if (!selected) return null;
 
   const monthDone = days.filter(d => isDone(selected.id, d)).length;
 
   return (
     <div>
-      {/* Habit selector */}
-      <div className="flex flex-wrap gap-2 mb-6">
+      {/* Scrollable habit pills */}
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 -mx-4 px-4 snap-x">
         {habits.map(h => (
           <button
             key={h.id}
             onClick={() => setSelected(h)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all border
-              ${selected.id === h.id ? "text-white border-transparent" : "bg-gray-900 border-gray-700 text-gray-400 hover:text-white"}`}
-            style={selected.id === h.id ? { backgroundColor: h.color, borderColor: h.color } : {}}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all border shrink-0 snap-start
+              ${selected.id === h.id ? "text-white border-transparent" : "bg-gray-900 border-gray-700 text-gray-400"}`}
+            style={selected.id === h.id ? { backgroundColor: selected.color, borderColor: selected.color } : {}}
           >
-            <span>{h.icon}</span> {h.name}
+            <span>{h.icon}</span>
+            <span className="whitespace-nowrap">{h.name}</span>
           </button>
         ))}
       </div>
 
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-5">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-4">
         <div className="flex items-center justify-between mb-4">
           <p className="font-semibold">{format(today, "MMMM yyyy")}</p>
-          <p className="text-sm text-gray-400">{monthDone}/{daysInMonth} days</p>
+          <p className="text-sm text-gray-400 tabular-nums">{monthDone}/{daysInMonth} days</p>
         </div>
 
-        <div className="grid grid-cols-7 gap-1 text-center text-xs text-gray-500 mb-2">
-          {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(d => <span key={d}>{d}</span>)}
+        <div className="grid grid-cols-7 gap-1 text-center mb-1">
+          {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(d => (
+            <span key={d} className="text-[10px] text-gray-500">{d}</span>
+          ))}
         </div>
 
         <div className="grid grid-cols-7 gap-1">
@@ -221,7 +212,7 @@ function MonthView({
             return (
               <div
                 key={d.toISOString()}
-                className={`aspect-square rounded-lg flex items-center justify-center text-xs font-medium transition-all
+                className={`aspect-square rounded-lg flex items-center justify-center text-xs font-medium
                   ${done ? "text-white" : isToday ? "border-2 text-gray-300" : "text-gray-600"}`}
                 style={
                   done
