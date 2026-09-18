@@ -14,3 +14,11 @@ export interface Completion {
   completed_date: string;
   created_at: string;
 }
+
+export interface WorkoutLog {
+  id: string;
+  entry_date: string;
+  content: string;
+  muscles: string[];
+  created_at: string;
+}
