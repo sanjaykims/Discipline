@@ -7,7 +7,7 @@ import type { WorkoutLog } from "@/lib/types";
 import { MuscleDiagram, MUSCLE_GROUPS, mixColor, type MuscleKey } from "@/components/MuscleDiagram";
 
 const todayStr = () => format(new Date(), "yyyy-MM-dd");
-const FADE_DAYS = 30; // color fades from full green (today) to neutral gray over this many days
+const FADE_DAYS = 7; // color fades from full green (today) to neutral gray over this many days
 
 // Text needs a lighter neutral floor than the body-diagram fill so faded
 // dates stay readable against the dark background.
