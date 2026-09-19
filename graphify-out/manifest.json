@@ -1,0 +1,236 @@
+{
+  ".claude/settings.json": {
+    "mtime": 1789806705.834845,
+    "seen": 1789807677.7176352,
+    "ast_hash": "3b541b9935fcf0831355da956f897645",
+    "semantic_hash": "3b541b9935fcf0831355da956f897645"
+  },
+  "next-env.d.ts": {
+    "mtime": 1789806579.6766033,
+    "seen": 1789807677.717653,
+    "ast_hash": "2a74d3909800ca5467fa83b0ab4a4890",
+    "semantic_hash": "2a74d3909800ca5467fa83b0ab4a4890"
+  },
+  "next.config.ts": {
+    "mtime": 1789806579.6767986,
+    "seen": 1789807677.717659,
+    "ast_hash": "daad32b4de0b92afe04301ebf0a6cc76",
+    "semantic_hash": "daad32b4de0b92afe04301ebf0a6cc76"
+  },
+  "package.json": {
+    "mtime": 1789806579.6786945,
+    "seen": 1789807677.717663,
+    "ast_hash": "1910023b3b56048d875c39fb83480ca3",
+    "semantic_hash": "1910023b3b56048d875c39fb83480ca3"
+  },
+  "postcss.config.mjs": {
+    "mtime": 1789806579.6789668,
+    "seen": 1789807677.717667,
+    "ast_hash": "d3fd1d29b05a09ff76b595a70e1e7d50",
+    "semantic_hash": "d3fd1d29b05a09ff76b595a70e1e7d50"
+  },
+  "src/app/habits/page.tsx": {
+    "mtime": 1789806579.6861324,
+    "seen": 1789807677.71767,
+    "ast_hash": "a861816877ca6ef82efbb23e34d8f1b5",
+    "semantic_hash": "a861816877ca6ef82efbb23e34d8f1b5"
+  },
+  "src/app/layout.tsx": {
+    "mtime": 1789806579.6865163,
+    "seen": 1789807677.717675,
+    "ast_hash": "0e3f8ca5c88ee0b78f35d3a1a2e3de61",
+    "semantic_hash": "0e3f8ca5c88ee0b78f35d3a1a2e3de61"
+  },
+  "src/app/manifest.ts": {
+    "mtime": 1789806579.6867604,
+    "seen": 1789807677.717678,
+    "ast_hash": "08ef98d2c417c892959f567a6fc6f62c",
+    "semantic_hash": "08ef98d2c417c892959f567a6fc6f62c"
+  },
+  "src/app/page.tsx": {
+    "mtime": 1789806579.6870797,
+    "seen": 1789807677.717682,
+    "ast_hash": "5feb69d01e3d86f530e0fef894d11ccb",
+    "semantic_hash": "5feb69d01e3d86f530e0fef894d11ccb"
+  },
+  "src/app/stats/page.tsx": {
+    "mtime": 1789806579.6877432,
+    "seen": 1789807677.717684,
+    "ast_hash": "8d7ed9b299f1330111de3bf710ce47f8",
+    "semantic_hash": "8d7ed9b299f1330111de3bf710ce47f8"
+  },
+  "src/app/workout/page.tsx": {
+    "mtime": 1789806579.6883817,
+    "seen": 1789807677.7176871,
+    "ast_hash": "7f8848ec0d3bda46f9b0845dfce1a8c2",
+    "semantic_hash": "7f8848ec0d3bda46f9b0845dfce1a8c2"
+  },
+  "src/components/BottomNav.tsx": {
+    "mtime": 1789806579.6889863,
+    "seen": 1789807677.717691,
+    "ast_hash": "9b5fb25d9de7d127333c83de52c4bcab",
+    "semantic_hash": "9b5fb25d9de7d127333c83de52c4bcab"
+  },
+  "src/components/MuscleDiagram.tsx": {
+    "mtime": 1789806579.6893594,
+    "seen": 1789807677.717694,
+    "ast_hash": "f399e21958b8c9de77c7a684ca81f2b0",
+    "semantic_hash": "f399e21958b8c9de77c7a684ca81f2b0"
+  },
+  "src/lib/supabase.ts": {
+    "mtime": 1789806579.6898992,
+    "seen": 1789807677.717697,
+    "ast_hash": "3b11976960525afb89a4bca416a9c24f",
+    "semantic_hash": "3b11976960525afb89a4bca416a9c24f"
+  },
+  "src/lib/types.ts": {
+    "mtime": 1789806579.6910906,
+    "seen": 1789807677.7177,
+    "ast_hash": "b1174d4b2dae02c811573ad7abba8bd9",
+    "semantic_hash": "b1174d4b2dae02c811573ad7abba8bd9"
+  },
+  "supabase/migrations/20260918_create_habits_and_completions.sql": {
+    "mtime": 1789806579.6919863,
+    "seen": 1789807677.7177029,
+    "ast_hash": "e33f925c3b456ea27ae00ef59a42b671",
+    "semantic_hash": "e33f925c3b456ea27ae00ef59a42b671"
+  },
+  "supabase/migrations/20260918_create_workout_logs.sql": {
+    "mtime": 1789806579.692335,
+    "seen": 1789807677.717706,
+    "ast_hash": "cad57054a1025f3eebe863028c403f7a",
+    "semantic_hash": "cad57054a1025f3eebe863028c403f7a"
+  },
+  "supabase/migrations/20260919_add_hours_slept.sql": {
+    "mtime": 1789806579.6926394,
+    "seen": 1789807677.717709,
+    "ast_hash": "9103adc5e7edcdebe202a3c0abcebb41",
+    "semantic_hash": "9103adc5e7edcdebe202a3c0abcebb41"
+  },
+  "supabase/migrations/20260919_add_weekly_target_to_habits.sql": {
+    "mtime": 1789806579.6929467,
+    "seen": 1789807677.717712,
+    "ast_hash": "13279fb65019a85e179bc44ecd0216b8",
+    "semantic_hash": "13279fb65019a85e179bc44ecd0216b8"
+  },
+  "supabase/migrations/20260919_create_habit_weekly_overrides.sql": {
+    "mtime": 1789806579.69324,
+    "seen": 1789807677.7177138,
+    "ast_hash": "2fce838b8badef9d36eaf6253f95aeac",
+    "semantic_hash": "2fce838b8badef9d36eaf6253f95aeac"
+  },
+  "tailwind.config.ts": {
+    "mtime": 1789806579.6935246,
+    "seen": 1789807677.717717,
+    "ast_hash": "0005921a0993a55ad0f20f9d603e7369",
+    "semantic_hash": "0005921a0993a55ad0f20f9d603e7369"
+  },
+  "tsconfig.json": {
+    "mtime": 1789806579.6938012,
+    "seen": 1789807677.717719,
+    "ast_hash": "d6e6b93fb360c85a309fc32ca6ebeb9b",
+    "semantic_hash": "d6e6b93fb360c85a309fc32ca6ebeb9b"
+  },
+  ".claude/CLAUDE.md": {
+    "mtime": 1789806705.8338442,
+    "seen": 1789807677.717725,
+    "ast_hash": "9b31786b637be3c13978bec4c2330752",
+    "semantic_hash": "9b31786b637be3c13978bec4c2330752"
+  },
+  ".claude/skills/graphify/SKILL.md": {
+    "mtime": 1789806705.8322957,
+    "seen": 1789807677.717727,
+    "ast_hash": "1656a8a8e4a05bbe69f32cd15de81e87",
+    "semantic_hash": "1656a8a8e4a05bbe69f32cd15de81e87"
+  },
+  ".claude/skills/graphify/references/add-watch.md": {
+    "mtime": 1789806695.4371684,
+    "seen": 1789807677.717729,
+    "ast_hash": "d59d027fe449f06aa03905a01184e779",
+    "semantic_hash": "d59d027fe449f06aa03905a01184e779"
+  },
+  ".claude/skills/graphify/references/exports.md": {
+    "mtime": 1789806695.4375348,
+    "seen": 1789807677.7177322,
+    "ast_hash": "9da2a2152e60a22f07f05fed5158f287",
+    "semantic_hash": "9da2a2152e60a22f07f05fed5158f287"
+  },
+  ".claude/skills/graphify/references/extraction-spec.md": {
+    "mtime": 1789806695.4379368,
+    "seen": 1789807677.7177348,
+    "ast_hash": "42fef56a01698118f7fd722acdadea34",
+    "semantic_hash": "42fef56a01698118f7fd722acdadea34"
+  },
+  ".claude/skills/graphify/references/github-and-merge.md": {
+    "mtime": 1789806695.438271,
+    "seen": 1789807677.717738,
+    "ast_hash": "cde13df085e4c492aeb7ba298a996d0d",
+    "semantic_hash": "cde13df085e4c492aeb7ba298a996d0d"
+  },
+  ".claude/skills/graphify/references/hooks.md": {
+    "mtime": 1789806695.4385865,
+    "seen": 1789807677.717741,
+    "ast_hash": "3f545db6ce646650bb9de588f5512a27",
+    "semantic_hash": "3f545db6ce646650bb9de588f5512a27"
+  },
+  ".claude/skills/graphify/references/query.md": {
+    "mtime": 1789806695.4391022,
+    "seen": 1789807677.7177432,
+    "ast_hash": "3c46f8ad006874260614ed8657d02307",
+    "semantic_hash": "3c46f8ad006874260614ed8657d02307"
+  },
+  ".claude/skills/graphify/references/transcribe.md": {
+    "mtime": 1789806695.439476,
+    "seen": 1789807677.7177448,
+    "ast_hash": "67b6a5fa6c0974e18f60db9f8932fbd8",
+    "semantic_hash": "67b6a5fa6c0974e18f60db9f8932fbd8"
+  },
+  ".claude/skills/graphify/references/update.md": {
+    "mtime": 1789806695.439876,
+    "seen": 1789807677.717748,
+    "ast_hash": "9378bd03d56baaf78bd738ab3848f142",
+    "semantic_hash": "9378bd03d56baaf78bd738ab3848f142"
+  },
+  "CLAUDE.md": {
+    "mtime": 1789806705.834412,
+    "seen": 1789807677.717751,
+    "ast_hash": "82efb97a359f5c7290bf2513d14686be",
+    "semantic_hash": "82efb97a359f5c7290bf2513d14686be"
+  },
+  "public/favicon.png": {
+    "mtime": 1789806579.6792705,
+    "seen": 1789807677.7177541,
+    "ast_hash": "314198c671c9e1e325b11cad6ab3180b",
+    "semantic_hash": "314198c671c9e1e325b11cad6ab3180b"
+  },
+  "public/icons/apple-icon.png": {
+    "mtime": 1789806579.6825762,
+    "seen": 1789807677.717757,
+    "ast_hash": "6d3b3d09f27d436c3cf4a44f7580dab8",
+    "semantic_hash": "6d3b3d09f27d436c3cf4a44f7580dab8"
+  },
+  "public/icons/icon-192.png": {
+    "mtime": 1789806579.6831758,
+    "seen": 1789807677.717759,
+    "ast_hash": "03337647f6e4bcb6b3e9647e9151d7ef",
+    "semantic_hash": "03337647f6e4bcb6b3e9647e9151d7ef"
+  },
+  "public/icons/icon-512.png": {
+    "mtime": 1789806579.684051,
+    "seen": 1789807677.717762,
+    "ast_hash": "ee6b342191d14ce2b092e55c7e02134e",
+    "semantic_hash": "ee6b342191d14ce2b092e55c7e02134e"
+  },
+  "src/app/apple-icon.png": {
+    "mtime": 1789806579.6849642,
+    "seen": 1789807677.717765,
+    "ast_hash": "6d3b3d09f27d436c3cf4a44f7580dab8",
+    "semantic_hash": "6d3b3d09f27d436c3cf4a44f7580dab8"
+  },
+  "src/app/favicon.png": {
+    "mtime": 1789806579.685209,
+    "seen": 1789807677.717768,
+    "ast_hash": "314198c671c9e1e325b11cad6ab3180b",
+    "semantic_hash": "314198c671c9e1e325b11cad6ab3180b"
+  }
+}

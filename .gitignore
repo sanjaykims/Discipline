@@ -13,3 +13,7 @@
 .DS_Store
 *.pem
 npm-debug.log*
+
+# graphify local machine state (not portable)
+graphify-out/.graphify_python
+graphify-out/.graphify_root
