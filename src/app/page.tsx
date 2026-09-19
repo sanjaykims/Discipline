@@ -8,9 +8,12 @@ import type { Habit, Completion, WaterLog, CigaretteLog } from "@/lib/types";
 const CIGARETTE_TARGET = 9;
 const WATER_TARGET_LITERS = 3.0;
 
+type WeekCompletion = Pick<Completion, "habit_id" | "completed_date">;
+
 export default function TodayPage() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [completions, setCompletions] = useState<Set<string>>(new Set());
+  const [weekCompletions, setWeekCompletions] = useState<WeekCompletion[]>([]);
   const [waterLiters, setWaterLiters] = useState(0);
   const [cigaretteCount, setCigaretteCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -25,15 +28,18 @@ export default function TodayPage() {
 
   const fetchData = useCallback(async () => {
     const since = format(subDays(new Date(), 1), "yyyy-MM-dd");
+    const weekSince = format(subDays(new Date(), 6), "yyyy-MM-dd");
     const [habitsRes, completionsRes, waterRes, cigaretteRes] = await Promise.all([
       supabase.from("habits").select("*").eq("is_active", true).order("created_at"),
-      supabase.from("completions").select("habit_id").eq("completed_date", today),
+      supabase.from("completions").select("habit_id, completed_date").gte("completed_date", weekSince),
       supabase.from("water_logs").select("liters").eq("entry_date", today),
       supabase.from("cigarette_logs").select("id, smoked_at").gte("smoked_at", since),
     ]);
     if (habitsRes.data) setHabits(habitsRes.data);
     if (completionsRes.data) {
-      setCompletions(new Set(completionsRes.data.map((c: Pick<Completion, "habit_id">) => c.habit_id)));
+      const rows = completionsRes.data as WeekCompletion[];
+      setCompletions(new Set(rows.filter(c => c.completed_date === today).map(c => c.habit_id)));
+      setWeekCompletions(rows);
     }
     if (waterRes.data) {
       setWaterLiters(waterRes.data.reduce((sum: number, w: Pick<WaterLog, "liters">) => sum + Number(w.liters), 0));
@@ -55,9 +61,11 @@ export default function TodayPage() {
       await supabase.from("completions").delete()
         .eq("habit_id", habitId).eq("completed_date", today);
       setCompletions(prev => { const s = new Set(prev); s.delete(habitId); return s; });
+      setWeekCompletions(prev => prev.filter(c => !(c.habit_id === habitId && c.completed_date === today)));
     } else {
       await supabase.from("completions").insert({ habit_id: habitId, completed_date: today });
       setCompletions(prev => new Set([...prev, habitId]));
+      setWeekCompletions(prev => [...prev, { habit_id: habitId, completed_date: today }]);
     }
   }
 
@@ -202,6 +210,9 @@ export default function TodayPage() {
       <div className="grid gap-2.5">
         {habits.map(habit => {
           const done = completions.has(habit.id);
+          const weekCount = habit.weekly_target
+            ? weekCompletions.filter(c => c.habit_id === habit.id).length
+            : null;
           return (
             <button
               key={habit.id}
@@ -229,6 +240,17 @@ export default function TodayPage() {
                   <p className="text-xs text-gray-500 truncate mt-0.5">{habit.description}</p>
                 )}
               </div>
+              {weekCount !== null && (
+                <span
+                  className="text-[11px] font-bold tabular-nums px-2 py-1 rounded-full shrink-0"
+                  style={{
+                    color: weekCount >= habit.weekly_target! ? "#34d399" : "#9ca3af",
+                    backgroundColor: weekCount >= habit.weekly_target! ? "#34d39922" : "#37415199",
+                  }}
+                >
+                  {weekCount}/{habit.weekly_target} wk
+                </span>
+              )}
               <div className={`w-6 h-6 rounded-full border-2 shrink-0 flex items-center justify-center transition-all
                 ${done ? "bg-emerald-500 border-emerald-500" : "border-gray-600"}`}>
                 {done && <span className="text-white text-xs font-bold">✓</span>}

@@ -5,6 +5,7 @@ export interface Habit {
   color: string;
   icon: string;
   is_active: boolean;
+  weekly_target: number | null;
   created_at: string;
 }
 
