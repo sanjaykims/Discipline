@@ -22,3 +22,16 @@ export interface WorkoutLog {
   muscles: string[];
   created_at: string;
 }
+
+export interface WaterLog {
+  id: string;
+  entry_date: string;
+  liters: number;
+  created_at: string;
+}
+
+export interface CigaretteLog {
+  id: string;
+  smoked_at: string;
+  created_at: string;
+}

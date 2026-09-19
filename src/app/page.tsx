@@ -1,25 +1,41 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import { supabase } from "@/lib/supabase";
-import type { Habit, Completion } from "@/lib/types";
+import type { Habit, Completion, WaterLog, CigaretteLog } from "@/lib/types";
+
+const CIGARETTE_TARGET = 9;
 
 export default function TodayPage() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [completions, setCompletions] = useState<Set<string>>(new Set());
+  const [waterLiters, setWaterLiters] = useState(0);
+  const [cigaretteCount, setCigaretteCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const today = format(new Date(), "yyyy-MM-dd");
   const displayDate = format(new Date(), "EEEE, MMMM d");
 
   const fetchData = useCallback(async () => {
-    const [habitsRes, completionsRes] = await Promise.all([
+    const since = format(subDays(new Date(), 1), "yyyy-MM-dd");
+    const [habitsRes, completionsRes, waterRes, cigaretteRes] = await Promise.all([
       supabase.from("habits").select("*").eq("is_active", true).order("created_at"),
       supabase.from("completions").select("habit_id").eq("completed_date", today),
+      supabase.from("water_logs").select("liters").eq("entry_date", today),
+      supabase.from("cigarette_logs").select("smoked_at").gte("smoked_at", since),
     ]);
     if (habitsRes.data) setHabits(habitsRes.data);
     if (completionsRes.data) {
       setCompletions(new Set(completionsRes.data.map((c: Pick<Completion, "habit_id">) => c.habit_id)));
+    }
+    if (waterRes.data) {
+      setWaterLiters(waterRes.data.reduce((sum: number, w: Pick<WaterLog, "liters">) => sum + Number(w.liters), 0));
+    }
+    if (cigaretteRes.data) {
+      const todayCount = cigaretteRes.data.filter(
+        (c: Pick<CigaretteLog, "smoked_at">) => format(new Date(c.smoked_at), "yyyy-MM-dd") === today
+      ).length;
+      setCigaretteCount(todayCount);
     }
     setLoading(false);
   }, [today]);
@@ -62,6 +78,26 @@ export default function TodayPage() {
         {pct === 100 && (
           <p className="text-emerald-400 text-sm font-medium">All done! Keep the streak alive. 🔥</p>
         )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5 mb-5">
+        <div className="bg-gray-900 border border-gray-700 rounded-xl p-3">
+          <div className="text-xl mb-1">💧</div>
+          <p className="text-xs text-gray-400 mb-1">Water</p>
+          <p className="text-xl font-bold tabular-nums text-sky-400">
+            {waterLiters.toFixed(1)}<span className="text-sm text-gray-500 font-normal"> L</span>
+          </p>
+        </div>
+        <div className="bg-gray-900 border border-gray-700 rounded-xl p-3">
+          <div className="text-xl mb-1">🚬</div>
+          <p className="text-xs text-gray-400 mb-1">Cigarettes</p>
+          <p
+            className="text-xl font-bold tabular-nums"
+            style={{ color: cigaretteCount > CIGARETTE_TARGET ? "#f87171" : "#fbbf24" }}
+          >
+            {cigaretteCount}<span className="text-sm text-gray-500 font-normal"> / {CIGARETTE_TARGET}</span>
+          </p>
+        </div>
       </div>
 
       <div className="grid gap-2.5">
