@@ -4,9 +4,20 @@ import { useEffect, useMemo, useState } from "react";
 import { format, parseISO, differenceInCalendarDays } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import type { WorkoutLog } from "@/lib/types";
-import { MuscleDiagram, MUSCLE_GROUPS, type MuscleKey, type MuscleStatus } from "@/components/MuscleDiagram";
+import { MuscleDiagram, MUSCLE_GROUPS, mixColor, type MuscleKey } from "@/components/MuscleDiagram";
 
 const todayStr = () => format(new Date(), "yyyy-MM-dd");
+const FADE_DAYS = 30; // color fades from full green (today) to neutral gray over this many days
+
+// Text needs a lighter neutral floor than the body-diagram fill so faded
+// dates stay readable against the dark background.
+function textColor(t: number) {
+  const NEUTRAL: [number, number, number] = [156, 163, 175]; // gray-400
+  const ACCENT: [number, number, number] = [52, 211, 153]; // emerald-400
+  const clamped = Math.max(0, Math.min(1, t));
+  const [r, g, b] = NEUTRAL.map((n, i) => Math.round(n + (ACCENT[i] - n) * clamped));
+  return `rgb(${r},${g},${b})`;
+}
 
 export default function WorkoutPage() {
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
@@ -30,20 +41,6 @@ export default function WorkoutPage() {
 
   useEffect(() => { fetchLogs(); }, []);
 
-  const muscleStatus = useMemo(() => {
-    const status = {} as Record<MuscleKey, MuscleStatus>;
-    for (const g of MUSCLE_GROUPS) status[g.key] = "none";
-    for (const log of logs) {
-      const daysAgo = differenceInCalendarDays(new Date(todayStr()), parseISO(log.entry_date));
-      for (const m of log.muscles ?? []) {
-        const key = m as MuscleKey;
-        if (daysAgo <= 0) status[key] = "today";
-        else if (daysAgo > 0 && daysAgo <= 7 && status[key] === "none") status[key] = "week";
-      }
-    }
-    return status;
-  }, [logs]);
-
   // logs are fetched ordered by entry_date desc, so the first log that
   // touches a muscle is that muscle's most recent worked date.
   const muscleLastDate = useMemo(() => {
@@ -57,6 +54,19 @@ export default function WorkoutPage() {
     }
     return map;
   }, [logs]);
+
+  // Color intensity fades continuously from 1 (worked today) to 0 (never
+  // worked, or last worked FADE_DAYS+ ago) rather than snapping between buckets.
+  const muscleIntensity = useMemo(() => {
+    const result = {} as Record<MuscleKey, number>;
+    for (const g of MUSCLE_GROUPS) {
+      const last = muscleLastDate[g.key];
+      if (!last) { result[g.key] = 0; continue; }
+      const daysAgo = differenceInCalendarDays(new Date(todayStr()), parseISO(last));
+      result[g.key] = daysAgo <= 0 ? 1 : Math.max(0, 1 - daysAgo / FADE_DAYS);
+    }
+    return result;
+  }, [muscleLastDate]);
 
   function openNew() {
     setDate(todayStr());
@@ -113,23 +123,28 @@ export default function WorkoutPage() {
 
       {/* Muscle map */}
       <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 mb-5">
-        <MuscleDiagram status={muscleStatus} />
-        <div className="flex items-center justify-center gap-4 mt-3 text-[11px] text-gray-400">
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#10b981" }} /> Today</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#10b981", opacity: 0.35 }} /> This week</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gray-800 border border-gray-600" /> Not recent</span>
+        <MuscleDiagram intensity={muscleIntensity} />
+
+        <div className="mt-3">
+          <div
+            className="h-2 rounded-full"
+            style={{ background: `linear-gradient(to right, ${mixColor(1)}, ${mixColor(0)})` }}
+          />
+          <div className="flex items-center justify-between text-[10px] text-gray-500 mt-1">
+            <span>Today</span>
+            <span>{FADE_DAYS}+ days ago</span>
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-1.5 mt-4">
           {MUSCLE_GROUPS.map(g => {
             const last = muscleLastDate[g.key];
-            const st = muscleStatus[g.key];
             return (
               <div key={g.key} className="bg-gray-800/60 rounded-lg px-2 py-1.5 text-center">
                 <p className="text-[10px] text-gray-400 truncate">{g.label}</p>
                 <p
                   className="text-[11px] font-semibold tabular-nums"
-                  style={{ color: st === "today" ? "#10b981" : st === "week" ? "#6ee7b7" : "#6b7280" }}
+                  style={{ color: last ? textColor(muscleIntensity[g.key]) : "#6b7280" }}
                 >
                   {last ? format(parseISO(last), "MMM d") : "—"}
                 </p>
