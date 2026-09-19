@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { format, subDays } from "date-fns";
+import { format, subDays, startOfWeek } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import type { Habit, Completion, WaterLog, CigaretteLog } from "@/lib/types";
 
@@ -14,6 +14,7 @@ export default function TodayPage() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [completions, setCompletions] = useState<Set<string>>(new Set());
   const [weekCompletions, setWeekCompletions] = useState<WeekCompletion[]>([]);
+  const [weekOverrides, setWeekOverrides] = useState<Record<string, number>>({});
   const [waterLiters, setWaterLiters] = useState(0);
   const [cigaretteCount, setCigaretteCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -28,12 +29,13 @@ export default function TodayPage() {
 
   const fetchData = useCallback(async () => {
     const since = format(subDays(new Date(), 1), "yyyy-MM-dd");
-    const weekSince = format(subDays(new Date(), 6), "yyyy-MM-dd");
-    const [habitsRes, completionsRes, waterRes, cigaretteRes] = await Promise.all([
+    const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 0 }), "yyyy-MM-dd");
+    const [habitsRes, completionsRes, waterRes, cigaretteRes, overridesRes] = await Promise.all([
       supabase.from("habits").select("*").eq("is_active", true).order("created_at"),
-      supabase.from("completions").select("habit_id, completed_date").gte("completed_date", weekSince),
+      supabase.from("completions").select("habit_id, completed_date").gte("completed_date", weekStart),
       supabase.from("water_logs").select("liters").eq("entry_date", today),
       supabase.from("cigarette_logs").select("id, smoked_at").gte("smoked_at", since),
+      supabase.from("habit_weekly_overrides").select("habit_id, target").eq("week_start", weekStart),
     ]);
     if (habitsRes.data) setHabits(habitsRes.data);
     if (completionsRes.data) {
@@ -49,6 +51,11 @@ export default function TodayPage() {
         (c: Pick<CigaretteLog, "smoked_at">) => format(new Date(c.smoked_at), "yyyy-MM-dd") === today
       ).length;
       setCigaretteCount(todayCount);
+    }
+    if (overridesRes.data) {
+      const map: Record<string, number> = {};
+      for (const o of overridesRes.data as { habit_id: string; target: number }[]) map[o.habit_id] = o.target;
+      setWeekOverrides(map);
     }
     setLoading(false);
   }, [today]);
@@ -210,7 +217,8 @@ export default function TodayPage() {
       <div className="grid gap-2.5">
         {habits.map(habit => {
           const done = completions.has(habit.id);
-          const weekCount = habit.weekly_target
+          const effectiveTarget = weekOverrides[habit.id] ?? habit.weekly_target;
+          const weekCount = effectiveTarget
             ? weekCompletions.filter(c => c.habit_id === habit.id).length
             : null;
           return (
@@ -244,11 +252,11 @@ export default function TodayPage() {
                 <span
                   className="text-[11px] font-bold tabular-nums px-2 py-1 rounded-full shrink-0"
                   style={{
-                    color: weekCount >= habit.weekly_target! ? "#34d399" : "#9ca3af",
-                    backgroundColor: weekCount >= habit.weekly_target! ? "#34d39922" : "#37415199",
+                    color: weekCount >= effectiveTarget! ? "#34d399" : "#9ca3af",
+                    backgroundColor: weekCount >= effectiveTarget! ? "#34d39922" : "#37415199",
                   }}
                 >
-                  {weekCount}/{habit.weekly_target} wk
+                  {weekCount}/{effectiveTarget} wk
                 </span>
               )}
               <div className={`w-6 h-6 rounded-full border-2 shrink-0 flex items-center justify-center transition-all
