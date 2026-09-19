@@ -44,6 +44,20 @@ export default function WorkoutPage() {
     return status;
   }, [logs]);
 
+  // logs are fetched ordered by entry_date desc, so the first log that
+  // touches a muscle is that muscle's most recent worked date.
+  const muscleLastDate = useMemo(() => {
+    const map = {} as Record<MuscleKey, string | null>;
+    for (const g of MUSCLE_GROUPS) map[g.key] = null;
+    for (const log of logs) {
+      for (const m of log.muscles ?? []) {
+        const key = m as MuscleKey;
+        if (!map[key]) map[key] = log.entry_date;
+      }
+    }
+    return map;
+  }, [logs]);
+
   function openNew() {
     setDate(todayStr());
     setContent("");
@@ -104,6 +118,24 @@ export default function WorkoutPage() {
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#10b981" }} /> Today</span>
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#10b981", opacity: 0.35 }} /> This week</span>
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gray-800 border border-gray-600" /> Not recent</span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-1.5 mt-4">
+          {MUSCLE_GROUPS.map(g => {
+            const last = muscleLastDate[g.key];
+            const st = muscleStatus[g.key];
+            return (
+              <div key={g.key} className="bg-gray-800/60 rounded-lg px-2 py-1.5 text-center">
+                <p className="text-[10px] text-gray-400 truncate">{g.label}</p>
+                <p
+                  className="text-[11px] font-semibold tabular-nums"
+                  style={{ color: st === "today" ? "#10b981" : st === "week" ? "#6ee7b7" : "#6b7280" }}
+                >
+                  {last ? format(parseISO(last), "MMM d") : "—"}
+                </p>
+              </div>
+            );
+          })}
         </div>
       </div>
 
