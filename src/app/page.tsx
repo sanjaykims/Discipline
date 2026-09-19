@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import type { Habit, Completion, WaterLog, CigaretteLog } from "@/lib/types";
 
 const CIGARETTE_TARGET = 9;
+const WATER_TARGET_LITERS = 3.0;
 
 export default function TodayPage() {
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -13,6 +14,12 @@ export default function TodayPage() {
   const [waterLiters, setWaterLiters] = useState(0);
   const [cigaretteCount, setCigaretteCount] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  const [editingWater, setEditingWater] = useState(false);
+  const [waterDraft, setWaterDraft] = useState("");
+  const [editingCigarettes, setEditingCigarettes] = useState(false);
+  const [cigaretteDraft, setCigaretteDraft] = useState("");
+
   const today = format(new Date(), "yyyy-MM-dd");
   const displayDate = format(new Date(), "EEEE, MMMM d");
 
@@ -22,7 +29,7 @@ export default function TodayPage() {
       supabase.from("habits").select("*").eq("is_active", true).order("created_at"),
       supabase.from("completions").select("habit_id").eq("completed_date", today),
       supabase.from("water_logs").select("liters").eq("entry_date", today),
-      supabase.from("cigarette_logs").select("smoked_at").gte("smoked_at", since),
+      supabase.from("cigarette_logs").select("id, smoked_at").gte("smoked_at", since),
     ]);
     if (habitsRes.data) setHabits(habitsRes.data);
     if (completionsRes.data) {
@@ -54,6 +61,49 @@ export default function TodayPage() {
     }
   }
 
+  // Water is stored as one or more rows per day; editing sets the day's total
+  // by replacing today's rows with a single row holding the new value.
+  async function saveWaterTotal(raw: string) {
+    setEditingWater(false);
+    const parsed = parseFloat(raw);
+    const value = Number.isFinite(parsed) ? Math.max(0, Math.round(parsed * 10) / 10) : waterLiters;
+    if (value === waterLiters) return;
+    await supabase.from("water_logs").delete().eq("entry_date", today);
+    if (value > 0) {
+      await supabase.from("water_logs").insert({ entry_date: today, liters: value });
+    }
+    setWaterLiters(value);
+  }
+
+  // Cigarettes are individual timestamped rows; editing the count inserts new
+  // rows (timestamped now) or deletes the most recent ones for today to match.
+  async function saveCigaretteCount(raw: string) {
+    setEditingCigarettes(false);
+    const parsed = parseInt(raw, 10);
+    const value = Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : cigaretteCount;
+    const diff = value - cigaretteCount;
+    if (diff === 0) return;
+    if (diff > 0) {
+      const rows = Array.from({ length: diff }, () => ({ smoked_at: new Date().toISOString() }));
+      await supabase.from("cigarette_logs").insert(rows);
+    } else {
+      const since = format(subDays(new Date(), 1), "yyyy-MM-dd");
+      const { data } = await supabase
+        .from("cigarette_logs")
+        .select("id, smoked_at")
+        .gte("smoked_at", since)
+        .order("smoked_at", { ascending: false });
+      const todayRows = (data || []).filter(
+        (r: Pick<CigaretteLog, "id" | "smoked_at">) => format(new Date(r.smoked_at), "yyyy-MM-dd") === today
+      );
+      const idsToRemove = todayRows.slice(0, -diff).map((r: Pick<CigaretteLog, "id">) => r.id);
+      if (idsToRemove.length) {
+        await supabase.from("cigarette_logs").delete().in("id", idsToRemove);
+      }
+    }
+    setCigaretteCount(value);
+  }
+
   const doneCount = completions.size;
   const total = habits.length;
   const pct = total ? Math.round((doneCount / total) * 100) : 0;
@@ -81,23 +131,72 @@ export default function TodayPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 mb-5">
-        <div className="bg-gray-900 border border-gray-700 rounded-xl p-3">
+        <button
+          onClick={() => { setWaterDraft(waterLiters.toFixed(1)); setEditingWater(true); }}
+          className="bg-gray-900 border border-gray-700 rounded-xl p-3 text-left active:border-gray-500"
+        >
           <div className="text-xl mb-1">💧</div>
           <p className="text-xs text-gray-400 mb-1">Water</p>
-          <p className="text-xl font-bold tabular-nums text-sky-400">
-            {waterLiters.toFixed(1)}<span className="text-sm text-gray-500 font-normal"> L</span>
-          </p>
-        </div>
-        <div className="bg-gray-900 border border-gray-700 rounded-xl p-3">
+          {editingWater ? (
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              min="0"
+              autoFocus
+              value={waterDraft}
+              onChange={e => setWaterDraft(e.target.value)}
+              onBlur={e => saveWaterTotal(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") setEditingWater(false);
+              }}
+              onClick={e => e.stopPropagation()}
+              className="w-full bg-gray-800 border border-sky-500 rounded-lg px-2 py-1 text-lg font-bold tabular-nums text-sky-400 focus:outline-none"
+            />
+          ) : (
+            <p
+              className="text-xl font-bold tabular-nums"
+              style={{ color: waterLiters >= WATER_TARGET_LITERS ? "#34d399" : "#38bdf8" }}
+            >
+              {waterLiters.toFixed(1)}
+              <span className="text-sm text-gray-500 font-normal"> / {WATER_TARGET_LITERS.toFixed(1)} L</span>
+            </p>
+          )}
+        </button>
+
+        <button
+          onClick={() => { setCigaretteDraft(String(cigaretteCount)); setEditingCigarettes(true); }}
+          className="bg-gray-900 border border-gray-700 rounded-xl p-3 text-left active:border-gray-500"
+        >
           <div className="text-xl mb-1">🚬</div>
           <p className="text-xs text-gray-400 mb-1">Cigarettes</p>
-          <p
-            className="text-xl font-bold tabular-nums"
-            style={{ color: cigaretteCount > CIGARETTE_TARGET ? "#f87171" : "#fbbf24" }}
-          >
-            {cigaretteCount}<span className="text-sm text-gray-500 font-normal"> / {CIGARETTE_TARGET}</span>
-          </p>
-        </div>
+          {editingCigarettes ? (
+            <input
+              type="number"
+              inputMode="numeric"
+              step="1"
+              min="0"
+              autoFocus
+              value={cigaretteDraft}
+              onChange={e => setCigaretteDraft(e.target.value)}
+              onBlur={e => saveCigaretteCount(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") setEditingCigarettes(false);
+              }}
+              onClick={e => e.stopPropagation()}
+              className="w-full bg-gray-800 border border-amber-500 rounded-lg px-2 py-1 text-lg font-bold tabular-nums text-amber-400 focus:outline-none"
+            />
+          ) : (
+            <p
+              className="text-xl font-bold tabular-nums"
+              style={{ color: cigaretteCount > CIGARETTE_TARGET ? "#f87171" : "#fbbf24" }}
+            >
+              {cigaretteCount}<span className="text-sm text-gray-500 font-normal"> / {CIGARETTE_TARGET}</span>
+            </p>
+          )}
+        </button>
       </div>
 
       <div className="grid gap-2.5">
