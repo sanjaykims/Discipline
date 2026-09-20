@@ -160,13 +160,13 @@ export default function WorkoutPage() {
           className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50"
           onClick={e => { if (e.target === e.currentTarget) setShowForm(false); }}
         >
-          <div className="bg-gray-900 border border-gray-700 rounded-t-2xl sm:rounded-2xl p-5 w-full sm:max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-5">
+          <div className="bg-gray-900 border border-gray-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85dvh] flex flex-col">
+            <div className="flex items-center justify-between p-5 pb-0 shrink-0">
               <h2 className="text-lg font-bold">{editId ? "Edit entry" : "New workout entry"}</h2>
               <button onClick={() => setShowForm(false)} className="text-gray-500 text-xl leading-none p-1">✕</button>
             </div>
 
-            <div className="space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
               <div>
                 <label className="text-xs text-gray-400 mb-1 block uppercase tracking-wide">Date</label>
                 <input
@@ -209,7 +209,7 @@ export default function WorkoutPage() {
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className="flex gap-3 p-5 pt-4 border-t border-gray-800 shrink-0">
               <button
                 onClick={() => setShowForm(false)}
                 className="flex-1 bg-gray-800 text-gray-300 py-3 rounded-xl text-sm transition-colors active:bg-gray-700"
