@@ -157,7 +157,7 @@ export default function WorkoutPage() {
       {/* Form bottom sheet / modal */}
       {showForm && (
         <div
-          className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50"
+          className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-[60]"
           onClick={e => { if (e.target === e.currentTarget) setShowForm(false); }}
         >
           <div className="bg-gray-900 border border-gray-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85dvh] flex flex-col">
