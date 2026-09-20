@@ -4,9 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { format, subDays, startOfWeek } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import type { Habit, Completion, WaterLog, CigaretteLog } from "@/lib/types";
-
-const CIGARETTE_TARGET = 9;
-const WATER_TARGET_LITERS = 3.0;
+import { CIGARETTE_TARGET, WATER_TARGET_LITERS } from "@/lib/constants";
 
 type WeekCompletion = Pick<Completion, "habit_id" | "completed_date">;
 
