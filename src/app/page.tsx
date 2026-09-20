@@ -23,6 +23,10 @@ export default function TodayPage() {
   const [waterDraft, setWaterDraft] = useState("");
   const [editingCigarettes, setEditingCigarettes] = useState(false);
   const [cigaretteDraft, setCigaretteDraft] = useState("");
+  const [cigaretteEntries, setCigaretteEntries] = useState<Pick<CigaretteLog, "id" | "smoked_at">[]>([]);
+  const [showCigaretteList, setShowCigaretteList] = useState(false);
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [entryTimeDraft, setEntryTimeDraft] = useState("");
 
   const today = format(new Date(), "yyyy-MM-dd");
   const displayDate = format(new Date(), "EEEE, MMMM d");
@@ -47,10 +51,11 @@ export default function TodayPage() {
       setWaterLiters(waterRes.data.reduce((sum: number, w: Pick<WaterLog, "liters">) => sum + Number(w.liters), 0));
     }
     if (cigaretteRes.data) {
-      const todayCount = cigaretteRes.data.filter(
-        (c: Pick<CigaretteLog, "smoked_at">) => format(new Date(c.smoked_at), "yyyy-MM-dd") === today
-      ).length;
-      setCigaretteCount(todayCount);
+      const todayRows = (cigaretteRes.data as Pick<CigaretteLog, "id" | "smoked_at">[])
+        .filter(c => format(new Date(c.smoked_at), "yyyy-MM-dd") === today)
+        .sort((a, b) => new Date(a.smoked_at).getTime() - new Date(b.smoked_at).getTime());
+      setCigaretteCount(todayRows.length);
+      setCigaretteEntries(todayRows);
     }
     if (overridesRes.data) {
       const map: Record<string, number> = {};
@@ -102,21 +107,41 @@ export default function TodayPage() {
       const rows = Array.from({ length: diff }, () => ({ smoked_at: new Date().toISOString() }));
       await supabase.from("cigarette_logs").insert(rows);
     } else {
-      const since = format(subDays(new Date(), 1), "yyyy-MM-dd");
-      const { data } = await supabase
-        .from("cigarette_logs")
-        .select("id, smoked_at")
-        .gte("smoked_at", since)
-        .order("smoked_at", { ascending: false });
-      const todayRows = (data || []).filter(
-        (r: Pick<CigaretteLog, "id" | "smoked_at">) => format(new Date(r.smoked_at), "yyyy-MM-dd") === today
-      );
-      const idsToRemove = todayRows.slice(0, -diff).map((r: Pick<CigaretteLog, "id">) => r.id);
+      // cigaretteEntries is oldest-first; drop the most recent ones to hit the target.
+      const idsToRemove = cigaretteEntries.slice(value).map(r => r.id);
       if (idsToRemove.length) {
         await supabase.from("cigarette_logs").delete().in("id", idsToRemove);
       }
     }
-    setCigaretteCount(value);
+    await fetchData();
+  }
+
+  async function addCigaretteEntry() {
+    await supabase.from("cigarette_logs").insert({ smoked_at: new Date().toISOString() });
+    await fetchData();
+  }
+
+  async function deleteCigaretteEntry(id: string) {
+    await supabase.from("cigarette_logs").delete().eq("id", id);
+    await fetchData();
+  }
+
+  function startEditEntryTime(entry: Pick<CigaretteLog, "id" | "smoked_at">) {
+    setEditingEntryId(entry.id);
+    setEntryTimeDraft(format(new Date(entry.smoked_at), "HH:mm"));
+  }
+
+  // Time-only edit: keeps the entry on today's date, just moves the clock time.
+  async function saveEntryTime(id: string, timeStr: string) {
+    setEditingEntryId(null);
+    const match = /^(\d{2}):(\d{2})$/.exec(timeStr);
+    const original = cigaretteEntries.find(e => e.id === id);
+    if (!match || !original) return;
+    const [, hh, mm] = match;
+    const newDate = new Date(original.smoked_at);
+    newDate.setHours(Number(hh), Number(mm), 0, 0);
+    await supabase.from("cigarette_logs").update({ smoked_at: newDate.toISOString() }).eq("id", id);
+    await fetchData();
   }
 
   const doneCount = completions.size;
@@ -145,73 +170,133 @@ export default function TodayPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 mb-5">
-        <button
-          onClick={() => { setWaterDraft(waterLiters.toFixed(1)); setEditingWater(true); }}
-          className="bg-gray-900 border border-gray-700 rounded-xl p-3 text-left active:border-gray-500"
-        >
-          <div className="text-xl mb-1">💧</div>
-          <p className="text-xs text-gray-400 mb-1">Water</p>
-          {editingWater ? (
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.1"
-              min="0"
-              autoFocus
-              value={waterDraft}
-              onChange={e => setWaterDraft(e.target.value)}
-              onBlur={e => saveWaterTotal(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                if (e.key === "Escape") setEditingWater(false);
-              }}
-              onClick={e => e.stopPropagation()}
-              className="w-full bg-gray-800 border border-sky-500 rounded-lg px-2 py-1 text-lg font-bold tabular-nums text-sky-400 focus:outline-none"
-            />
-          ) : (
-            <p
-              className="text-xl font-bold tabular-nums"
-              style={{ color: waterLiters >= WATER_TARGET_LITERS ? "#34d399" : "#38bdf8" }}
-            >
-              {waterLiters.toFixed(1)}
-              <span className="text-sm text-gray-500 font-normal"> / {WATER_TARGET_LITERS.toFixed(1)} L</span>
-            </p>
-          )}
-        </button>
+      <div className="mb-5">
+        <div className="grid grid-cols-2 gap-2.5">
+          <button
+            onClick={() => { setWaterDraft(waterLiters.toFixed(1)); setEditingWater(true); }}
+            className="bg-gray-900 border border-gray-700 rounded-xl p-3 text-left active:border-gray-500"
+          >
+            <div className="text-xl mb-1">💧</div>
+            <p className="text-xs text-gray-400 mb-1">Water</p>
+            {editingWater ? (
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.1"
+                min="0"
+                autoFocus
+                value={waterDraft}
+                onChange={e => setWaterDraft(e.target.value)}
+                onBlur={e => saveWaterTotal(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") setEditingWater(false);
+                }}
+                onClick={e => e.stopPropagation()}
+                className="w-full bg-gray-800 border border-sky-500 rounded-lg px-2 py-1 text-lg font-bold tabular-nums text-sky-400 focus:outline-none"
+              />
+            ) : (
+              <p
+                className="text-xl font-bold tabular-nums"
+                style={{ color: waterLiters >= WATER_TARGET_LITERS ? "#34d399" : "#38bdf8" }}
+              >
+                {waterLiters.toFixed(1)}
+                <span className="text-sm text-gray-500 font-normal"> / {WATER_TARGET_LITERS.toFixed(1)} L</span>
+              </p>
+            )}
+          </button>
 
-        <button
-          onClick={() => { setCigaretteDraft(String(cigaretteCount)); setEditingCigarettes(true); }}
-          className="bg-gray-900 border border-gray-700 rounded-xl p-3 text-left active:border-gray-500"
-        >
-          <div className="text-xl mb-1">🚬</div>
-          <p className="text-xs text-gray-400 mb-1">Cigarettes</p>
-          {editingCigarettes ? (
-            <input
-              type="number"
-              inputMode="numeric"
-              step="1"
-              min="0"
-              autoFocus
-              value={cigaretteDraft}
-              onChange={e => setCigaretteDraft(e.target.value)}
-              onBlur={e => saveCigaretteCount(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                if (e.key === "Escape") setEditingCigarettes(false);
-              }}
-              onClick={e => e.stopPropagation()}
-              className="w-full bg-gray-800 border border-amber-500 rounded-lg px-2 py-1 text-lg font-bold tabular-nums text-amber-400 focus:outline-none"
-            />
-          ) : (
-            <p
-              className="text-xl font-bold tabular-nums"
-              style={{ color: cigaretteCount > CIGARETTE_TARGET ? "#f87171" : "#fbbf24" }}
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-3 relative">
+            <button
+              onClick={() => setShowCigaretteList(v => !v)}
+              className="absolute top-2.5 right-2.5 text-[10px] text-gray-500 active:text-gray-300 z-10"
             >
-              {cigaretteCount}<span className="text-sm text-gray-500 font-normal"> / {CIGARETTE_TARGET}</span>
-            </p>
-          )}
-        </button>
+              {showCigaretteList ? "hide" : "times ▾"}
+            </button>
+            <button
+              onClick={() => { setCigaretteDraft(String(cigaretteCount)); setEditingCigarettes(true); }}
+              className="w-full text-left"
+            >
+              <div className="text-xl mb-1">🚬</div>
+              <p className="text-xs text-gray-400 mb-1">Cigarettes</p>
+              {editingCigarettes ? (
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  step="1"
+                  min="0"
+                  autoFocus
+                  value={cigaretteDraft}
+                  onChange={e => setCigaretteDraft(e.target.value)}
+                  onBlur={e => saveCigaretteCount(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    if (e.key === "Escape") setEditingCigarettes(false);
+                  }}
+                  onClick={e => e.stopPropagation()}
+                  className="w-full bg-gray-800 border border-amber-500 rounded-lg px-2 py-1 text-lg font-bold tabular-nums text-amber-400 focus:outline-none"
+                />
+              ) : (
+                <p
+                  className="text-xl font-bold tabular-nums"
+                  style={{ color: cigaretteCount > CIGARETTE_TARGET ? "#f87171" : "#fbbf24" }}
+                >
+                  {cigaretteCount}<span className="text-sm text-gray-500 font-normal"> / {CIGARETTE_TARGET}</span>
+                </p>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {showCigaretteList && (
+          <div className="mt-2.5 bg-gray-900 border border-gray-700 rounded-xl p-3">
+            <p className="text-xs text-gray-400 mb-2">Today&apos;s cigarettes</p>
+            {cigaretteEntries.length === 0 ? (
+              <p className="text-xs text-gray-600 mb-2">None yet today.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {cigaretteEntries.map(entry => (
+                  <div key={entry.id} className="flex items-center gap-1 bg-gray-800 rounded-lg pl-2 pr-1 py-1">
+                    {editingEntryId === entry.id ? (
+                      <input
+                        type="time"
+                        autoFocus
+                        value={entryTimeDraft}
+                        onChange={e => setEntryTimeDraft(e.target.value)}
+                        onBlur={e => saveEntryTime(entry.id, e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                          if (e.key === "Escape") setEditingEntryId(null);
+                        }}
+                        className="bg-gray-900 border border-amber-500 rounded px-1 text-xs text-amber-300 tabular-nums focus:outline-none w-[74px]"
+                      />
+                    ) : (
+                      <button
+                        onClick={() => startEditEntryTime(entry)}
+                        className="text-xs text-gray-300 tabular-nums active:text-amber-300"
+                      >
+                        {format(new Date(entry.smoked_at), "h:mm a")}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => deleteCigaretteEntry(entry.id)}
+                      className="text-gray-600 active:text-red-400 text-xs w-5 h-5 flex items-center justify-center shrink-0"
+                      aria-label="Delete entry"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={addCigaretteEntry}
+              className="text-xs text-indigo-400 active:text-indigo-300"
+            >
+              + Add now
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-2.5">
