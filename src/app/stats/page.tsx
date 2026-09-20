@@ -268,6 +268,7 @@ function CigaretteCard({
   function targetOn(d: Date) {
     return cigaretteTargetFor(d, schedule);
   }
+  const todayTarget = targetOn(today);
 
   function cellFill(count: number, dayTarget: number) {
     if (count === 0) return undefined;
@@ -282,7 +283,7 @@ function CigaretteCard({
     const maxDay = Math.max(...weekDays.map(targetOn), ...weekDays.map(cigCount));
     return (
       <div className="bg-gray-900 border border-gray-700 rounded-2xl p-4 mb-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <span className="text-xl">🚬</span>
             <p className="font-semibold">Cigarettes</p>
@@ -291,6 +292,7 @@ function CigaretteCard({
             {total}<span className="text-gray-500 font-normal"> / {target}</span>
           </p>
         </div>
+        <p className="text-[11px] text-gray-500 mb-3">today&apos;s target: {todayTarget}/day</p>
         <div className="flex items-end gap-2 h-24">
           {weekDays.map(d => {
             const count = cigCount(d);
@@ -332,7 +334,7 @@ function CigaretteCard({
 
   return (
     <div className="bg-gray-900 border border-gray-700 rounded-2xl p-4 mb-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <span className="text-xl">🚬</span>
           <p className="font-semibold">Cigarettes</p>
@@ -341,6 +343,7 @@ function CigaretteCard({
           {monthTotal}<span className="text-gray-500 font-normal"> / {monthTarget}</span>
         </p>
       </div>
+      <p className="text-[11px] text-gray-500 mb-3">today&apos;s target: {todayTarget}/day</p>
 
       <div className="grid grid-cols-7 gap-1 text-center mb-1">
         {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(d => (
