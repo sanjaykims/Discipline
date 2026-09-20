@@ -59,6 +59,24 @@ export default function StatsPage() {
     return completions.some(c => c.habit_id === habitId && c.completed_date === key);
   }
 
+  // Shared by WeekView and MonthView — both read the same `completions`
+  // state, so toggling in one view is immediately reflected in the other
+  // the moment you switch, with no separate sync step needed.
+  async function toggleCompletion(habitId: string, date: Date) {
+    const key = format(date, "yyyy-MM-dd");
+    const done = completions.some(c => c.habit_id === habitId && c.completed_date === key);
+    if (done) {
+      await supabase.from("completions").delete().eq("habit_id", habitId).eq("completed_date", key);
+      setCompletions(prev => prev.filter(c => !(c.habit_id === habitId && c.completed_date === key)));
+    } else {
+      await supabase.from("completions").insert({ habit_id: habitId, completed_date: key });
+      setCompletions(prev => [
+        ...prev,
+        { id: crypto.randomUUID(), habit_id: habitId, completed_date: key, created_at: new Date().toISOString() },
+      ]);
+    }
+  }
+
   const cigByDate = new Map<string, number>();
   for (const log of cigaretteLogs) {
     const key = format(new Date(log.smoked_at), "yyyy-MM-dd");
@@ -108,7 +126,7 @@ export default function StatsPage() {
       <CigaretteCard view={view} today={today} cigCount={cigCount} schedule={cigaretteSchedule} />
 
       {view === "week" ? (
-        <WeekView habits={habits} days={weekDays} isDone={isDone} today={today} />
+        <WeekView habits={habits} days={weekDays} isDone={isDone} today={today} onToggle={toggleCompletion} />
       ) : (
         <MonthView
           habits={habits}
@@ -117,6 +135,7 @@ export default function StatsPage() {
           daysInMonth={getDaysInMonth(today)}
           isDone={isDone}
           today={today}
+          onToggle={toggleCompletion}
         />
       )}
     </div>
@@ -124,12 +143,13 @@ export default function StatsPage() {
 }
 
 function WeekView({
-  habits, days, isDone, today,
+  habits, days, isDone, today, onToggle,
 }: {
   habits: Habit[];
   days: Date[];
   isDone: (id: string, d: Date) => boolean;
   today: Date;
+  onToggle: (habitId: string, d: Date) => void;
 }) {
   const todayStr = format(today, "yyyy-MM-dd");
   return (
@@ -159,10 +179,12 @@ function WeekView({
               {days.map(d => {
                 const done = isDone(h.id, d);
                 return (
-                  <div
+                  <button
                     key={d.toISOString()}
-                    className="flex-1 aspect-square rounded-full"
+                    onClick={() => onToggle(h.id, d)}
+                    className="flex-1 aspect-square rounded-full active:scale-90 transition-transform"
                     style={done ? { backgroundColor: h.color } : { backgroundColor: "#1f2937" }}
+                    aria-label={`${h.name} on ${format(d, "MMM d")}`}
                   />
                 );
               })}
@@ -178,7 +200,7 @@ function WeekView({
 }
 
 function MonthView({
-  habits, days, firstDayOfWeek, daysInMonth, isDone, today,
+  habits, days, firstDayOfWeek, daysInMonth, isDone, today, onToggle,
 }: {
   habits: Habit[];
   days: Date[];
@@ -186,11 +208,13 @@ function MonthView({
   daysInMonth: number;
   isDone: (id: string, d: Date) => boolean;
   today: Date;
+  onToggle: (habitId: string, d: Date) => void;
 }) {
   const [selected, setSelected] = useState<Habit>(habits[0]);
   if (!selected) return null;
 
   const monthDone = days.filter(d => isDone(selected.id, d)).length;
+  const todayStr = format(today, "yyyy-MM-dd");
 
   return (
     <div>
@@ -226,12 +250,17 @@ function MonthView({
           {Array.from({ length: firstDayOfWeek }).map((_, i) => <div key={`e-${i}`} />)}
           {days.map(d => {
             const done = isDone(selected.id, d);
-            const isToday = format(d, "yyyy-MM-dd") === format(today, "yyyy-MM-dd");
+            const dateStr = format(d, "yyyy-MM-dd");
+            const isToday = dateStr === todayStr;
+            const isFuture = dateStr > todayStr;
             return (
-              <div
+              <button
                 key={d.toISOString()}
-                className={`aspect-square rounded-lg flex items-center justify-center text-xs font-medium
-                  ${done ? "text-white" : isToday ? "border-2 text-gray-300" : "text-gray-600"}`}
+                onClick={() => onToggle(selected.id, d)}
+                disabled={isFuture}
+                className={`aspect-square rounded-lg flex items-center justify-center text-xs font-medium transition-transform
+                  ${isFuture ? "cursor-not-allowed" : "active:scale-90"}
+                  ${done ? "text-white" : isToday ? "border-2 text-gray-300" : isFuture ? "text-gray-700" : "text-gray-600"}`}
                 style={
                   done
                     ? { backgroundColor: selected.color }
@@ -241,7 +270,7 @@ function MonthView({
                 }
               >
                 {format(d, "d")}
-              </div>
+              </button>
             );
           })}
         </div>
