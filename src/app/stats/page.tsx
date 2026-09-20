@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { format, subDays, eachDayOfInterval, startOfMonth, endOfMonth, getDay, getDaysInMonth } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import type { Habit, Completion, CigaretteLog } from "@/lib/types";
-import { CIGARETTE_TARGET } from "@/lib/constants";
+import { cigaretteTargetFor, type CigaretteTargetRule } from "@/lib/cigaretteTarget";
 
 type ViewMode = "week" | "month";
 
@@ -25,20 +25,23 @@ export default function StatsPage() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [completions, setCompletions] = useState<Completion[]>([]);
   const [cigaretteLogs, setCigaretteLogs] = useState<Pick<CigaretteLog, "smoked_at">[]>([]);
+  const [cigaretteSchedule, setCigaretteSchedule] = useState<CigaretteTargetRule[]>([]);
   const [view, setView] = useState<ViewMode>("week");
   const [loading, setLoading] = useState(true);
   const today = new Date();
 
   const fetchData = useCallback(async () => {
     const since = format(subDays(today, 60), "yyyy-MM-dd");
-    const [hRes, cRes, cigRes] = await Promise.all([
+    const [hRes, cRes, cigRes, cigScheduleRes] = await Promise.all([
       supabase.from("habits").select("*").eq("is_active", true).order("created_at"),
       supabase.from("completions").select("*").gte("completed_date", since),
       supabase.from("cigarette_logs").select("smoked_at").gte("smoked_at", since),
+      supabase.from("cigarette_target_schedule").select("effective_date, daily_target"),
     ]);
     if (hRes.data) setHabits(hRes.data);
     if (cRes.data) setCompletions(cRes.data);
     if (cigRes.data) setCigaretteLogs(cigRes.data);
+    if (cigScheduleRes.data) setCigaretteSchedule(cigScheduleRes.data as CigaretteTargetRule[]);
     setLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -102,7 +105,7 @@ export default function StatsPage() {
         })}
       </div>
 
-      <CigaretteCard view={view} today={today} cigCount={cigCount} />
+      <CigaretteCard view={view} today={today} cigCount={cigCount} schedule={cigaretteSchedule} />
 
       {view === "week" ? (
         <WeekView habits={habits} days={weekDays} isDone={isDone} today={today} />
@@ -248,11 +251,12 @@ function MonthView({
 }
 
 function CigaretteCard({
-  view, today, cigCount,
+  view, today, cigCount, schedule,
 }: {
   view: ViewMode;
   today: Date;
   cigCount: (d: Date) => number;
+  schedule: CigaretteTargetRule[];
 }) {
   const weekDays = eachDayOfInterval({ start: subDays(today, 6), end: today });
   const monthStart = startOfMonth(today);
@@ -261,17 +265,21 @@ function CigaretteCard({
   const firstDayOfWeek = getDay(monthStart);
   const todayStr = format(today, "yyyy-MM-dd");
 
-  function cellFill(count: number) {
+  function targetOn(d: Date) {
+    return cigaretteTargetFor(d, schedule);
+  }
+
+  function cellFill(count: number, dayTarget: number) {
     if (count === 0) return undefined;
-    if (count > CIGARETTE_TARGET) return { backgroundColor: "#f87171" };
-    const alpha = 0.25 + Math.min(1, count / CIGARETTE_TARGET) * 0.65;
+    if (count > dayTarget) return { backgroundColor: "#f87171" };
+    const alpha = 0.25 + Math.min(1, count / dayTarget) * 0.65;
     return { backgroundColor: `rgba(251, 191, 36, ${alpha})` };
   }
 
   if (view === "week") {
     const total = weekDays.reduce((sum, d) => sum + cigCount(d), 0);
-    const target = CIGARETTE_TARGET * weekDays.length;
-    const maxDay = Math.max(CIGARETTE_TARGET, ...weekDays.map(cigCount));
+    const target = weekDays.reduce((sum, d) => sum + targetOn(d), 0);
+    const maxDay = Math.max(...weekDays.map(targetOn), ...weekDays.map(cigCount));
     return (
       <div className="bg-gray-900 border border-gray-700 rounded-2xl p-4 mb-6">
         <div className="flex items-center justify-between mb-4">
@@ -286,7 +294,8 @@ function CigaretteCard({
         <div className="flex items-end gap-2 h-24">
           {weekDays.map(d => {
             const count = cigCount(d);
-            const over = count > CIGARETTE_TARGET;
+            const dayTarget = targetOn(d);
+            const over = count > dayTarget;
             const heightPct = count > 0 ? Math.max(8, (count / maxDay) * 100) : 3;
             const isToday = format(d, "yyyy-MM-dd") === todayStr;
             return (
@@ -319,7 +328,7 @@ function CigaretteCard({
   }
 
   const monthTotal = monthDays.reduce((sum, d) => sum + cigCount(d), 0);
-  const monthTarget = CIGARETTE_TARGET * monthDays.length;
+  const monthTarget = monthDays.reduce((sum, d) => sum + targetOn(d), 0);
 
   return (
     <div className="bg-gray-900 border border-gray-700 rounded-2xl p-4 mb-6">
@@ -343,7 +352,7 @@ function CigaretteCard({
         {monthDays.map(d => {
           const count = cigCount(d);
           const isToday = format(d, "yyyy-MM-dd") === todayStr;
-          const fill = cellFill(count);
+          const fill = cellFill(count, targetOn(d));
           return (
             <div
               key={d.toISOString()}

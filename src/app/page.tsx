@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { format, subDays, startOfWeek } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import type { Habit, Completion, WaterLog, CigaretteLog } from "@/lib/types";
-import { CIGARETTE_TARGET, WATER_TARGET_LITERS } from "@/lib/constants";
+import { WATER_TARGET_LITERS } from "@/lib/constants";
+import { cigaretteTargetFor, type CigaretteTargetRule } from "@/lib/cigaretteTarget";
 
 type WeekCompletion = Pick<Completion, "habit_id" | "completed_date">;
 
@@ -25,6 +26,7 @@ export default function TodayPage() {
   const [showCigaretteList, setShowCigaretteList] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [entryTimeDraft, setEntryTimeDraft] = useState("");
+  const [cigaretteSchedule, setCigaretteSchedule] = useState<CigaretteTargetRule[]>([]);
 
   const today = format(new Date(), "yyyy-MM-dd");
   const displayDate = format(new Date(), "EEEE, MMMM d");
@@ -32,12 +34,13 @@ export default function TodayPage() {
   const fetchData = useCallback(async () => {
     const since = format(subDays(new Date(), 1), "yyyy-MM-dd");
     const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 0 }), "yyyy-MM-dd");
-    const [habitsRes, completionsRes, waterRes, cigaretteRes, overridesRes] = await Promise.all([
+    const [habitsRes, completionsRes, waterRes, cigaretteRes, overridesRes, cigScheduleRes] = await Promise.all([
       supabase.from("habits").select("*").eq("is_active", true).order("created_at"),
       supabase.from("completions").select("habit_id, completed_date").gte("completed_date", weekStart),
       supabase.from("water_logs").select("liters").eq("entry_date", today),
       supabase.from("cigarette_logs").select("id, smoked_at").gte("smoked_at", since),
       supabase.from("habit_weekly_overrides").select("habit_id, target").eq("week_start", weekStart),
+      supabase.from("cigarette_target_schedule").select("effective_date, daily_target"),
     ]);
     if (habitsRes.data) setHabits(habitsRes.data);
     if (completionsRes.data) {
@@ -60,6 +63,7 @@ export default function TodayPage() {
       for (const o of overridesRes.data as { habit_id: string; target: number }[]) map[o.habit_id] = o.target;
       setWeekOverrides(map);
     }
+    if (cigScheduleRes.data) setCigaretteSchedule(cigScheduleRes.data as CigaretteTargetRule[]);
     setLoading(false);
   }, [today]);
 
@@ -145,6 +149,7 @@ export default function TodayPage() {
   const doneCount = completions.size;
   const total = habits.length;
   const pct = total ? Math.round((doneCount / total) * 100) : 0;
+  const cigaretteTarget = cigaretteTargetFor(new Date(), cigaretteSchedule);
 
   if (loading) return <div className="text-gray-500 text-center pt-20">Loading…</div>;
 
@@ -237,9 +242,9 @@ export default function TodayPage() {
               ) : (
                 <p
                   className="text-xl font-bold tabular-nums"
-                  style={{ color: cigaretteCount > CIGARETTE_TARGET ? "#f87171" : "#fbbf24" }}
+                  style={{ color: cigaretteCount > cigaretteTarget ? "#f87171" : "#fbbf24" }}
                 >
-                  {cigaretteCount}<span className="text-sm text-gray-500 font-normal"> / {CIGARETTE_TARGET}</span>
+                  {cigaretteCount}<span className="text-sm text-gray-500 font-normal"> / {cigaretteTarget}</span>
                 </p>
               )}
             </button>
