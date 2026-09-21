@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
-  format, subDays, eachDayOfInterval, startOfWeek, isToday, isYesterday,
+  format, subDays, eachDayOfInterval, startOfWeek, endOfWeek, isToday, isYesterday,
 } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import type { CigaretteLog } from "@/lib/types";
@@ -128,11 +128,14 @@ export default function SmokePage() {
     await fetchData();
   }
 
-  // Week-to-date rollup, using the same Sunday-start convention as the Today page.
-  const weekStart = startOfWeek(today, { weekStartsOn: 0 });
-  const weekDaysSoFar = eachDayOfInterval({ start: weekStart, end: today });
-  const weekCount = weekDaysSoFar.reduce((sum, d) => sum + (byDay.get(dayKey(d))?.length ?? 0), 0);
-  const weekTarget = weekDaysSoFar.reduce((sum, d) => sum + cigaretteTargetFor(d, schedule), 0);
+  // Weekly pool: Monday start, Sunday end. Target is the full week's budget
+  // (e.g. 8/day x 7 = 56), not just days elapsed — count naturally stops
+  // growing once future days have no entries yet.
+  const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
+  const weekDaysAll = eachDayOfInterval({ start: weekStart, end: weekEnd });
+  const weekCount = weekDaysAll.reduce((sum, d) => sum + (byDay.get(dayKey(d))?.length ?? 0), 0);
+  const weekTarget = weekDaysAll.reduce((sum, d) => sum + cigaretteTargetFor(d, schedule), 0);
   const todayTarget = cigaretteTargetFor(today, schedule);
 
   if (loading) return <div className="text-gray-500 text-center pt-20">Loading…</div>;
