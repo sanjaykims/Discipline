@@ -32,6 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/habits" className="hover:text-white transition-colors">Habits</Link>
             <Link href="/workout" className="hover:text-white transition-colors">Workout</Link>
             <Link href="/stats" className="hover:text-white transition-colors">Stats</Link>
+            <Link href="/smoke" className="hover:text-white transition-colors">Smoke</Link>
           </div>
         </nav>
 

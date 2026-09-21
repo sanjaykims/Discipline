@@ -2,197 +2,274 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
-  format, startOfWeek, endOfWeek, eachDayOfInterval,
-  isToday, getDay, differenceInMinutes,
+  format, subDays, eachDayOfInterval, startOfWeek, isToday, isYesterday,
 } from "date-fns";
 import { supabase } from "@/lib/supabase";
+import type { CigaretteLog } from "@/lib/types";
+import { cigaretteTargetFor, type CigaretteTargetRule } from "@/lib/cigaretteTarget";
 
-const WEEKLY_TARGET = 56;
+const HISTORY_DAYS = 10;
 
-interface CigaretteLog {
-  id: string;
-  logged_at: string;
+type Entry = Pick<CigaretteLog, "id" | "smoked_at">;
+
+function dayKey(d: Date) {
+  return format(d, "yyyy-MM-dd");
 }
 
-function getWeekBounds(date: Date) {
-  const start = startOfWeek(date, { weekStartsOn: 1 });
-  const end = endOfWeek(date, { weekStartsOn: 1 });
-  return { start, end };
+function dayLabel(d: Date) {
+  if (isToday(d)) return "Today";
+  if (isYesterday(d)) return "Yesterday";
+  return format(d, "EEE, MMM d");
 }
 
-function computePace(count: number, weekStart: Date, now: Date): number {
-  const minutesElapsed = differenceInMinutes(now, weekStart);
-  const minutesInWeek = 7 * 24 * 60;
-  if (minutesElapsed <= 0) return 0;
-  return Math.round((count / minutesElapsed) * minutesInWeek);
+// Builds a Date for a given day at a given HH:mm, defaulting new entries to
+// "now" for today (most common case) or noon for past days, since a past
+// day has no meaningful "now" — the time is expected to be corrected right after.
+function defaultTimeFor(day: Date): Date {
+  const d = new Date(day);
+  if (isToday(day)) return new Date();
+  d.setHours(12, 0, 0, 0);
+  return d;
 }
 
 export default function SmokePage() {
-  const [logs, setLogs] = useState<CigaretteLog[]>([]);
+  const [logs, setLogs] = useState<Entry[]>([]);
+  const [schedule, setSchedule] = useState<CigaretteTargetRule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [logging, setLogging] = useState(false);
-  const now = new Date();
-  const { start: weekStart, end: weekEnd } = getWeekBounds(now);
-  const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [editingDay, setEditingDay] = useState<string | null>(null);
+  const [dayDraft, setDayDraft] = useState("");
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [entryTimeDraft, setEntryTimeDraft] = useState("");
 
-  const fetchLogs = useCallback(async () => {
-    const { data } = await supabase
-      .from("cigarettes")
-      .select("id, logged_at")
-      .gte("logged_at", weekStart.toISOString())
-      .lte("logged_at", weekEnd.toISOString())
-      .order("logged_at", { ascending: true });
-    if (data) setLogs(data);
+  const today = new Date();
+  const days = eachDayOfInterval({ start: subDays(today, HISTORY_DAYS - 1), end: today }).reverse();
+
+  const fetchData = useCallback(async () => {
+    const since = format(subDays(today, HISTORY_DAYS), "yyyy-MM-dd");
+    const [logsRes, scheduleRes] = await Promise.all([
+      supabase.from("cigarette_logs").select("id, smoked_at").gte("smoked_at", since).order("smoked_at", { ascending: true }),
+      supabase.from("cigarette_target_schedule").select("effective_date, daily_target"),
+    ]);
+    if (logsRes.data) setLogs(logsRes.data);
+    if (scheduleRes.data) setSchedule(scheduleRes.data as CigaretteTargetRule[]);
     setLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  async function logOne() {
-    setLogging(true);
+  const byDay = new Map<string, Entry[]>();
+  for (const log of logs) {
+    const key = format(new Date(log.smoked_at), "yyyy-MM-dd");
+    byDay.set(key, [...(byDay.get(key) ?? []), log]);
+  }
+
+  function toggleExpanded(key: string) {
+    setExpanded(prev => {
+      const s = new Set(prev);
+      if (s.has(key)) s.delete(key); else s.add(key);
+      return s;
+    });
+  }
+
+  // Bulk-set a day's count: inserts new timestamped rows or removes the most
+  // recent ones for that day to match, same convention as the Today page.
+  async function saveDayCount(day: Date, raw: string) {
+    setEditingDay(null);
+    const key = dayKey(day);
+    const current = byDay.get(key) ?? [];
+    const parsed = parseInt(raw, 10);
+    const value = Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : current.length;
+    const diff = value - current.length;
+    if (diff === 0) return;
+    if (diff > 0) {
+      const rows = Array.from({ length: diff }, () => ({ smoked_at: defaultTimeFor(day).toISOString() }));
+      await supabase.from("cigarette_logs").insert(rows);
+    } else {
+      const idsToRemove = current.slice(diff).map(e => e.id);
+      if (idsToRemove.length) await supabase.from("cigarette_logs").delete().in("id", idsToRemove);
+    }
+    await fetchData();
+  }
+
+  async function addEntry(day: Date) {
     const { data } = await supabase
-      .from("cigarettes")
-      .insert({ logged_at: new Date().toISOString() })
-      .select("id, logged_at")
+      .from("cigarette_logs")
+      .insert({ smoked_at: defaultTimeFor(day).toISOString() })
+      .select("id, smoked_at")
       .single();
-    if (data) setLogs(prev => [...prev, data]);
-    setLogging(false);
+    await fetchData();
+    setExpanded(prev => new Set(prev).add(dayKey(day)));
+    if (data) {
+      setEditingEntryId(data.id);
+      setEntryTimeDraft(format(new Date(data.smoked_at), "HH:mm"));
+    }
   }
 
-  async function undoLast() {
-    const last = logs[logs.length - 1];
-    if (!last) return;
-    await supabase.from("cigarettes").delete().eq("id", last.id);
-    setLogs(prev => prev.slice(0, -1));
+  async function deleteEntry(id: string) {
+    await supabase.from("cigarette_logs").delete().eq("id", id);
+    await fetchData();
   }
 
-  const count = logs.length;
-  const remaining = Math.max(0, WEEKLY_TARGET - count);
-  const pct = Math.min(100, Math.round((count / WEEKLY_TARGET) * 100));
-  const pace = computePace(count, weekStart, now);
-  const overBudget = count > WEEKLY_TARGET;
-  const daysLeft = 7 - (getDay(now) === 0 ? 7 : getDay(now) === 1 ? 1 : getDay(now) - 1) - 1;
+  function startEditEntryTime(entry: Entry) {
+    setEditingEntryId(entry.id);
+    setEntryTimeDraft(format(new Date(entry.smoked_at), "HH:mm"));
+  }
 
-  // per-day counts
-  const byDay = Object.fromEntries(
-    weekDays.map(d => [
-      format(d, "yyyy-MM-dd"),
-      logs.filter(l => format(new Date(l.logged_at), "yyyy-MM-dd") === format(d, "yyyy-MM-dd")).length,
-    ])
-  );
+  async function saveEntryTime(entry: Entry, timeStr: string) {
+    setEditingEntryId(null);
+    const match = /^(\d{2}):(\d{2})$/.exec(timeStr);
+    if (!match) return;
+    const [, hh, mm] = match;
+    const newDate = new Date(entry.smoked_at);
+    newDate.setHours(Number(hh), Number(mm), 0, 0);
+    await supabase.from("cigarette_logs").update({ smoked_at: newDate.toISOString() }).eq("id", entry.id);
+    await fetchData();
+  }
 
-  const lastLog = logs[logs.length - 1];
-  const barColor = overBudget ? "#ef4444" : pct > 75 ? "#f97316" : "#6366f1";
+  // Week-to-date rollup, using the same Sunday-start convention as the Today page.
+  const weekStart = startOfWeek(today, { weekStartsOn: 0 });
+  const weekDaysSoFar = eachDayOfInterval({ start: weekStart, end: today });
+  const weekCount = weekDaysSoFar.reduce((sum, d) => sum + (byDay.get(dayKey(d))?.length ?? 0), 0);
+  const weekTarget = weekDaysSoFar.reduce((sum, d) => sum + cigaretteTargetFor(d, schedule), 0);
+  const todayTarget = cigaretteTargetFor(today, schedule);
 
   if (loading) return <div className="text-gray-500 text-center pt-20">Loading…</div>;
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Smoking Tracker</h1>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Week of {format(weekStart, "MMM d")} – {format(weekEnd, "MMM d")}
-        </p>
+        <p className="text-xs text-gray-500 mt-0.5">Tap a count to edit it — including past days</p>
       </div>
 
-      {/* Big counter card */}
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-5 text-center">
-        <div className="flex items-end justify-center gap-1 mb-1">
-          <span
-            className="text-6xl font-black tabular-nums leading-none"
-            style={{ color: barColor }}
-          >
-            {count}
-          </span>
-          <span className="text-2xl text-gray-500 mb-1">/ {WEEKLY_TARGET}</span>
+      {/* Week-to-date rollup */}
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-4">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-sm text-gray-400">This week so far</p>
+          <p className="text-lg font-bold tabular-nums" style={{ color: weekCount > weekTarget ? "#f87171" : "#fbbf24" }}>
+            {weekCount}<span className="text-gray-500 font-normal text-sm"> / {weekTarget}</span>
+          </p>
         </div>
-        <p className="text-xs text-gray-400 mb-4">this week</p>
-
-        {/* Progress bar */}
-        <div className="w-full bg-gray-800 rounded-full h-3 mb-2 overflow-hidden">
+        <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
           <div
-            className="h-3 rounded-full transition-all duration-500"
-            style={{ width: `${pct}%`, backgroundColor: barColor }}
+            className="h-2 rounded-full transition-all duration-500"
+            style={{
+              width: `${Math.min(100, weekTarget ? (weekCount / weekTarget) * 100 : 0)}%`,
+              backgroundColor: weekCount > weekTarget ? "#f87171" : "#fbbf24",
+            }}
           />
         </div>
-
-        {/* Pace */}
-        <p className={`text-sm font-medium ${overBudget ? "text-red-400" : pace > WEEKLY_TARGET ? "text-orange-400" : "text-emerald-400"}`}>
-          {overBudget
-            ? `${count - WEEKLY_TARGET} over budget this week`
-            : pace > WEEKLY_TARGET
-            ? `On pace for ${pace} — ${pace - WEEKLY_TARGET} over ⚠️`
-            : `On pace for ${pace} — ${remaining} left · ${daysLeft}d to go ✓`}
-        </p>
+        <p className="text-[11px] text-gray-500 mt-2">today&apos;s target: {todayTarget}/day</p>
       </div>
 
-      {/* Log button */}
-      <button
-        onClick={logOne}
-        disabled={logging}
-        className="w-full py-5 rounded-2xl font-bold text-lg tracking-wide transition-all active:scale-[0.97] disabled:opacity-60"
-        style={{ backgroundColor: barColor + "22", border: `2px solid ${barColor}`, color: barColor }}
-      >
-        {logging ? "Logging…" : "🚬  I smoked one"}
-      </button>
+      {/* Editable day-by-day log */}
+      <div className="space-y-2">
+        {days.map(day => {
+          const key = dayKey(day);
+          const entries = byDay.get(key) ?? [];
+          const target = cigaretteTargetFor(day, schedule);
+          const over = entries.length > target;
+          const color = over ? "#f87171" : "#fbbf24";
+          const isOpen = expanded.has(key);
 
-      {/* Undo */}
-      {lastLog && (
-        <button
-          onClick={undoLast}
-          className="w-full py-3 rounded-xl bg-gray-900 border border-gray-800 text-gray-500 text-sm transition-colors active:bg-gray-800 flex items-center justify-center gap-2"
-        >
-          <span>↩</span>
-          <span>Undo last — {format(new Date(lastLog.logged_at), "h:mm a")}</span>
-        </button>
-      )}
-
-      {/* Daily breakdown */}
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-4 space-y-2">
-        <p className="text-xs text-gray-500 uppercase tracking-wide mb-3">Daily breakdown</p>
-        {weekDays.map(d => {
-          const key = format(d, "yyyy-MM-dd");
-          const n = byDay[key] ?? 0;
-          const today = isToday(d);
-          const future = d > now && !today;
-          const maxDots = 8;
           return (
-            <div key={key} className="flex items-center gap-2">
-              <div className="w-14 shrink-0">
-                <span className={`text-xs font-medium ${today ? "text-indigo-400" : future ? "text-gray-700" : "text-gray-400"}`}>
-                  {format(d, "EEE d")}
-                </span>
-              </div>
-              <div className="flex-1 flex gap-1 items-center">
-                {Array.from({ length: Math.min(n, maxDots) }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-3 h-3 rounded-full shrink-0"
-                    style={{ backgroundColor: barColor }}
+            <div key={key} className="bg-gray-900 border border-gray-700 rounded-xl overflow-hidden">
+              <div className="flex items-center gap-3 p-3.5">
+                <button
+                  onClick={() => toggleExpanded(key)}
+                  className="flex-1 min-w-0 text-left flex items-center gap-2"
+                >
+                  <span className={`text-xs ${isOpen ? "rotate-90" : ""} transition-transform text-gray-600 w-3 shrink-0`}>▸</span>
+                  <span className={`text-sm font-medium ${isToday(day) ? "text-indigo-400" : "text-gray-300"}`}>
+                    {dayLabel(day)}
+                  </span>
+                </button>
+
+                {editingDay === key ? (
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    autoFocus
+                    defaultValue={entries.length}
+                    onChange={e => setDayDraft(e.target.value)}
+                    onBlur={e => saveDayCount(day, e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      if (e.key === "Escape") setEditingDay(null);
+                    }}
+                    className="w-16 bg-gray-800 border border-amber-500 rounded-lg px-2 py-1 text-base font-bold tabular-nums text-amber-400 text-right focus:outline-none"
                   />
-                ))}
-                {n > maxDots && (
-                  <span className="text-xs text-gray-500">+{n - maxDots}</span>
-                )}
-                {n === 0 && !future && (
-                  <span className="text-xs text-gray-700">—</span>
+                ) : (
+                  <button
+                    onClick={() => { setDayDraft(String(entries.length)); setEditingDay(key); }}
+                    className="text-base font-bold tabular-nums px-1"
+                    style={{ color }}
+                  >
+                    {entries.length}<span className="text-gray-500 font-normal text-sm"> / {target}</span>
+                  </button>
                 )}
               </div>
-              <span className={`text-sm tabular-nums font-semibold w-5 text-right ${future ? "text-gray-800" : today ? "text-white" : "text-gray-400"}`}>
-                {future ? "" : n}
-              </span>
+
+              {isOpen && (
+                <div className="px-3.5 pb-3.5 pt-0 border-t border-gray-800 bg-gray-950/40">
+                  {entries.length === 0 ? (
+                    <p className="text-xs text-gray-600 mt-3 mb-2">No entries this day.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 mt-3 mb-2">
+                      {entries.map(entry => (
+                        <div key={entry.id} className="flex items-center gap-1 bg-gray-800 rounded-lg pl-2 pr-1 py-1">
+                          {editingEntryId === entry.id ? (
+                            <input
+                              type="time"
+                              autoFocus
+                              value={entryTimeDraft}
+                              onChange={e => setEntryTimeDraft(e.target.value)}
+                              onBlur={e => saveEntryTime(entry, e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                                if (e.key === "Escape") setEditingEntryId(null);
+                              }}
+                              className="bg-gray-900 border border-amber-500 rounded px-1 text-xs text-amber-300 tabular-nums focus:outline-none w-[74px]"
+                            />
+                          ) : (
+                            <button
+                              onClick={() => startEditEntryTime(entry)}
+                              className="text-xs text-gray-300 tabular-nums active:text-amber-300"
+                            >
+                              {format(new Date(entry.smoked_at), "h:mm a")}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => deleteEntry(entry.id)}
+                            className="text-gray-600 active:text-red-400 text-xs w-5 h-5 flex items-center justify-center shrink-0"
+                            aria-label="Delete entry"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => addEntry(day)}
+                    className="text-xs text-indigo-400 active:text-indigo-300"
+                  >
+                    + Add {isToday(day) ? "now" : "entry"}
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* Step-down context */}
       <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-3">
         <p className="text-xs text-gray-500">
-          <span className="text-gray-300 font-medium">Chuseok week plan</span>
-          {" "}· 56 cigarettes = 8/day average. Flexible weekly pool — bank early days to use later, or quit days carry forward.
+          <span className="text-gray-300 font-medium">Step-down plan</span>
+          {" "}· target drops from 8/day to 7/day starting Sep 28, part of the Chuseok-week wind-down.
         </p>
       </div>
     </div>
