@@ -36,3 +36,10 @@ export interface CigaretteLog {
   smoked_at: string;
   created_at: string;
 }
+
+export interface WeightLog {
+  id: string;
+  entry_date: string;
+  weight_kg: number;
+  created_at: string;
+}

@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { format, subDays, eachDayOfInterval, startOfMonth, endOfMonth, getDay, getDaysInMonth } from "date-fns";
 import { supabase } from "@/lib/supabase";
-import type { Habit, Completion, CigaretteLog } from "@/lib/types";
+import type { Habit, Completion, CigaretteLog, WeightLog } from "@/lib/types";
 import { cigaretteTargetFor, type CigaretteTargetRule } from "@/lib/cigaretteTarget";
+import { WEIGHT_START_KG, WEIGHT_GOAL_KG } from "@/lib/constants";
 
 type ViewMode = "week" | "month";
 
@@ -26,22 +27,25 @@ export default function StatsPage() {
   const [completions, setCompletions] = useState<Completion[]>([]);
   const [cigaretteLogs, setCigaretteLogs] = useState<Pick<CigaretteLog, "smoked_at">[]>([]);
   const [cigaretteSchedule, setCigaretteSchedule] = useState<CigaretteTargetRule[]>([]);
+  const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
   const [view, setView] = useState<ViewMode>("week");
   const [loading, setLoading] = useState(true);
   const today = new Date();
 
   const fetchData = useCallback(async () => {
     const since = format(subDays(today, 60), "yyyy-MM-dd");
-    const [hRes, cRes, cigRes, cigScheduleRes] = await Promise.all([
+    const [hRes, cRes, cigRes, cigScheduleRes, weightRes] = await Promise.all([
       supabase.from("habits").select("*").eq("is_active", true).order("created_at"),
       supabase.from("completions").select("*").gte("completed_date", since),
       supabase.from("cigarette_logs").select("smoked_at").gte("smoked_at", since),
       supabase.from("cigarette_target_schedule").select("effective_date, daily_target"),
+      supabase.from("weight_logs").select("*").order("entry_date", { ascending: true }),
     ]);
     if (hRes.data) setHabits(hRes.data);
     if (cRes.data) setCompletions(cRes.data);
     if (cigRes.data) setCigaretteLogs(cigRes.data);
     if (cigScheduleRes.data) setCigaretteSchedule(cigScheduleRes.data as CigaretteTargetRule[]);
+    if (weightRes.data) setWeightLogs(weightRes.data);
     setLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -122,6 +126,8 @@ export default function StatsPage() {
           );
         })}
       </div>
+
+      <WeightCard logs={weightLogs} />
 
       <CigaretteCard view={view} today={today} cigCount={cigCount} schedule={cigaretteSchedule} />
 
@@ -397,6 +403,62 @@ function CigaretteCard({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function WeightCard({ logs }: { logs: WeightLog[] }) {
+  if (logs.length === 0) return null;
+
+  const latest = logs[logs.length - 1];
+  const lost = WEIGHT_START_KG - latest.weight_kg;
+  const toGo = Math.max(0, latest.weight_kg - WEIGHT_GOAL_KG);
+  const totalRange = WEIGHT_START_KG - WEIGHT_GOAL_KG;
+  const progressPct = totalRange > 0 ? Math.min(100, Math.max(0, (lost / totalRange) * 100)) : 0;
+  const reachedGoal = latest.weight_kg <= WEIGHT_GOAL_KG;
+  const color = reachedGoal ? "#34d399" : "#818cf8";
+
+  // Sparkline of the full trend, min/max padded to include the start and goal
+  // weights so the line reads against the real journey, not just its own range.
+  const values = logs.map(l => l.weight_kg);
+  const minV = Math.min(...values, WEIGHT_GOAL_KG);
+  const maxV = Math.max(...values, WEIGHT_START_KG);
+  const w = 300, h = 56;
+  const points = logs.map((l, i) => {
+    const x = logs.length > 1 ? (i / (logs.length - 1)) * w : w / 2;
+    const y = maxV > minV ? h - ((l.weight_kg - minV) / (maxV - minV)) * h : h / 2;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+
+  return (
+    <div className="bg-gray-900 border border-gray-700 rounded-2xl p-4 mb-6">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">⚖️</span>
+          <p className="font-semibold">Weight</p>
+        </div>
+        <p className="text-sm tabular-nums" style={{ color }}>
+          {latest.weight_kg.toFixed(1)}<span className="text-gray-500 font-normal"> / {WEIGHT_GOAL_KG} kg</span>
+        </p>
+      </div>
+      <p className="text-[11px] text-gray-500 mb-3">
+        {lost > 0 ? `-${lost.toFixed(1)}kg from ${WEIGHT_START_KG}kg` : `starting at ${WEIGHT_START_KG}kg`}
+        {" · "}
+        {reachedGoal ? "goal reached 🎉" : `${toGo.toFixed(1)}kg to go`}
+      </p>
+
+      <div className="w-full bg-gray-800 rounded-full h-2 mb-3 overflow-hidden">
+        <div
+          className="h-2 rounded-full transition-all duration-500"
+          style={{ width: `${progressPct}%`, backgroundColor: color }}
+        />
+      </div>
+
+      {logs.length > 1 && (
+        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-14" preserveAspectRatio="none">
+          <polyline points={points} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
     </div>
   );
 }

@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { format, subDays, startOfWeek } from "date-fns";
 import { supabase } from "@/lib/supabase";
-import type { Habit, Completion, WaterLog, CigaretteLog } from "@/lib/types";
-import { WATER_TARGET_LITERS } from "@/lib/constants";
+import type { Habit, Completion, WaterLog, CigaretteLog, WeightLog } from "@/lib/types";
+import { WATER_TARGET_LITERS, WEIGHT_START_KG, WEIGHT_GOAL_KG } from "@/lib/constants";
 import { cigaretteTargetFor, type CigaretteTargetRule } from "@/lib/cigaretteTarget";
 
 type WeekCompletion = Pick<Completion, "habit_id" | "completed_date">;
@@ -16,10 +16,13 @@ export default function TodayPage() {
   const [weekOverrides, setWeekOverrides] = useState<Record<string, number>>({});
   const [waterLiters, setWaterLiters] = useState(0);
   const [cigaretteCount, setCigaretteCount] = useState(0);
+  const [latestWeight, setLatestWeight] = useState<WeightLog | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [editingWater, setEditingWater] = useState(false);
   const [waterDraft, setWaterDraft] = useState("");
+  const [editingWeight, setEditingWeight] = useState(false);
+  const [weightDraft, setWeightDraft] = useState("");
   const [editingCigarettes, setEditingCigarettes] = useState(false);
   const [cigaretteDraft, setCigaretteDraft] = useState("");
   const [cigaretteEntries, setCigaretteEntries] = useState<Pick<CigaretteLog, "id" | "smoked_at">[]>([]);
@@ -34,13 +37,14 @@ export default function TodayPage() {
   const fetchData = useCallback(async () => {
     const since = format(subDays(new Date(), 1), "yyyy-MM-dd");
     const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 0 }), "yyyy-MM-dd");
-    const [habitsRes, completionsRes, waterRes, cigaretteRes, overridesRes, cigScheduleRes] = await Promise.all([
+    const [habitsRes, completionsRes, waterRes, cigaretteRes, overridesRes, cigScheduleRes, weightRes] = await Promise.all([
       supabase.from("habits").select("*").eq("is_active", true).order("created_at"),
       supabase.from("completions").select("habit_id, completed_date").gte("completed_date", weekStart),
       supabase.from("water_logs").select("liters").eq("entry_date", today),
       supabase.from("cigarette_logs").select("id, smoked_at").gte("smoked_at", since),
       supabase.from("habit_weekly_overrides").select("habit_id, target").eq("week_start", weekStart),
       supabase.from("cigarette_target_schedule").select("effective_date, daily_target"),
+      supabase.from("weight_logs").select("*").order("entry_date", { ascending: false }).limit(1),
     ]);
     if (habitsRes.data) setHabits(habitsRes.data);
     if (completionsRes.data) {
@@ -64,6 +68,7 @@ export default function TodayPage() {
       setWeekOverrides(map);
     }
     if (cigScheduleRes.data) setCigaretteSchedule(cigScheduleRes.data as CigaretteTargetRule[]);
+    if (weightRes.data) setLatestWeight((weightRes.data[0] as WeightLog) ?? null);
     setLoading(false);
   }, [today]);
 
@@ -95,6 +100,18 @@ export default function TodayPage() {
       await supabase.from("water_logs").insert({ entry_date: today, liters: value });
     }
     setWaterLiters(value);
+  }
+
+  // Weight is one entry per day; editing upserts today's row so re-editing
+  // the same day overwrites rather than creating duplicates.
+  async function saveWeight(raw: string) {
+    setEditingWeight(false);
+    const parsed = parseFloat(raw);
+    const current = latestWeight?.weight_kg ?? WEIGHT_START_KG;
+    const value = Number.isFinite(parsed) ? Math.max(0, Math.round(parsed * 10) / 10) : current;
+    if (value === current && latestWeight?.entry_date === today) return;
+    await supabase.from("weight_logs").upsert({ entry_date: today, weight_kg: value }, { onConflict: "entry_date" });
+    await fetchData();
   }
 
   // Cigarettes are individual timestamped rows; editing the count inserts new
@@ -174,13 +191,13 @@ export default function TodayPage() {
       </div>
 
       <div className="mb-5">
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-3 gap-2">
           <button
             onClick={() => { setWaterDraft(waterLiters.toFixed(1)); setEditingWater(true); }}
-            className="bg-gray-900 border border-gray-700 rounded-xl p-3 text-left active:border-gray-500"
+            className="bg-gray-900 border border-gray-700 rounded-xl p-2.5 text-left active:border-gray-500"
           >
-            <div className="text-xl mb-1">💧</div>
-            <p className="text-xs text-gray-400 mb-1">Water</p>
+            <div className="text-lg mb-1">💧</div>
+            <p className="text-[11px] text-gray-400 mb-1">Water</p>
             {editingWater ? (
               <input
                 type="number"
@@ -196,23 +213,57 @@ export default function TodayPage() {
                   if (e.key === "Escape") setEditingWater(false);
                 }}
                 onClick={e => e.stopPropagation()}
-                className="w-full bg-gray-800 border border-sky-500 rounded-lg px-2 py-1 text-lg font-bold tabular-nums text-sky-400 focus:outline-none"
+                className="w-full bg-gray-800 border border-sky-500 rounded-lg px-1.5 py-1 text-base font-bold tabular-nums text-sky-400 focus:outline-none"
               />
             ) : (
               <p
-                className="text-xl font-bold tabular-nums"
+                className="text-lg font-bold tabular-nums"
                 style={{ color: waterLiters >= WATER_TARGET_LITERS ? "#34d399" : "#38bdf8" }}
               >
                 {waterLiters.toFixed(1)}
-                <span className="text-sm text-gray-500 font-normal"> / {WATER_TARGET_LITERS.toFixed(1)} L</span>
+                <span className="text-xs text-gray-500 font-normal"> /{WATER_TARGET_LITERS.toFixed(1)}L</span>
               </p>
             )}
           </button>
 
-          <div className="bg-gray-900 border border-gray-700 rounded-xl p-3 relative">
+          <button
+            onClick={() => { setWeightDraft((latestWeight?.weight_kg ?? WEIGHT_START_KG).toFixed(1)); setEditingWeight(true); }}
+            className="bg-gray-900 border border-gray-700 rounded-xl p-2.5 text-left active:border-gray-500"
+          >
+            <div className="text-lg mb-1">⚖️</div>
+            <p className="text-[11px] text-gray-400 mb-1">Weight</p>
+            {editingWeight ? (
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.1"
+                min="0"
+                autoFocus
+                value={weightDraft}
+                onChange={e => setWeightDraft(e.target.value)}
+                onBlur={e => saveWeight(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") setEditingWeight(false);
+                }}
+                onClick={e => e.stopPropagation()}
+                className="w-full bg-gray-800 border border-indigo-500 rounded-lg px-1.5 py-1 text-base font-bold tabular-nums text-indigo-300 focus:outline-none"
+              />
+            ) : (
+              <p
+                className="text-lg font-bold tabular-nums"
+                style={{ color: (latestWeight?.weight_kg ?? WEIGHT_START_KG) <= WEIGHT_GOAL_KG ? "#34d399" : "#818cf8" }}
+              >
+                {(latestWeight?.weight_kg ?? WEIGHT_START_KG).toFixed(1)}
+                <span className="text-xs text-gray-500 font-normal"> /{WEIGHT_GOAL_KG}kg</span>
+              </p>
+            )}
+          </button>
+
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-2.5 relative">
             <button
               onClick={() => setShowCigaretteList(v => !v)}
-              className="absolute top-2.5 right-2.5 text-[10px] text-gray-500 active:text-gray-300 z-10"
+              className="absolute top-2 right-2 text-[9px] text-gray-500 active:text-gray-300 z-10"
             >
               {showCigaretteList ? "hide" : "times ▾"}
             </button>
@@ -220,8 +271,8 @@ export default function TodayPage() {
               onClick={() => { setCigaretteDraft(String(cigaretteCount)); setEditingCigarettes(true); }}
               className="w-full text-left"
             >
-              <div className="text-xl mb-1">🚬</div>
-              <p className="text-xs text-gray-400 mb-1">Cigarettes</p>
+              <div className="text-lg mb-1">🚬</div>
+              <p className="text-[11px] text-gray-400 mb-1">Cigarettes</p>
               {editingCigarettes ? (
                 <input
                   type="number"
@@ -237,14 +288,14 @@ export default function TodayPage() {
                     if (e.key === "Escape") setEditingCigarettes(false);
                   }}
                   onClick={e => e.stopPropagation()}
-                  className="w-full bg-gray-800 border border-amber-500 rounded-lg px-2 py-1 text-lg font-bold tabular-nums text-amber-400 focus:outline-none"
+                  className="w-full bg-gray-800 border border-amber-500 rounded-lg px-1.5 py-1 text-base font-bold tabular-nums text-amber-400 focus:outline-none"
                 />
               ) : (
                 <p
-                  className="text-xl font-bold tabular-nums"
+                  className="text-lg font-bold tabular-nums"
                   style={{ color: cigaretteCount > cigaretteTarget ? "#f87171" : "#fbbf24" }}
                 >
-                  {cigaretteCount}<span className="text-sm text-gray-500 font-normal"> / {cigaretteTarget}</span>
+                  {cigaretteCount}<span className="text-xs text-gray-500 font-normal"> /{cigaretteTarget}</span>
                 </p>
               )}
             </button>
