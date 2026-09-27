@@ -20,6 +20,27 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Bash|Edit|Write|Read|WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "autoharness check --stdin --constitution .autoharness/constitution.yaml --format hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pip install --quiet \"git+https://github.com/sanjaykims/AutoHarness.git@3561e468f9ca9f9bf282512e695bd32e4e90fef4\" || true",
+            "timeout": 120
+          }
+        ]
       }
     ]
   }
